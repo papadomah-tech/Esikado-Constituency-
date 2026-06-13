@@ -113,6 +113,8 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 .pip-row{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}
 .pip{width:9px;height:9px;border-radius:3px;background:var(--line-strong)}
 .pip.on{background:var(--green)}
+.reg{font-variant-numeric:tabular-nums;font-weight:700;color:var(--green-dark);letter-spacing:.02em}
+.reg-tag{display:inline-block;font-variant-numeric:tabular-nums;font-weight:800;font-size:12px;letter-spacing:.06em;color:var(--green-dark);background:var(--green-soft);border:1px solid var(--line-strong);padding:2px 9px;border-radius:7px;margin-bottom:7px}
 
 /* ---------- Forms ---------- */
 .field{margin-bottom:13px}
@@ -276,11 +278,39 @@ async function bootstrap(){
     await Store.set('user:admin', {id:'admin', username:'admin', password:'ndc2024', fullName:'Constituency Admin', role:'constituency_admin'});
     await Store.set('positions', DEFAULT_POSITIONS);
     await Store.set('settings', State.settings);
+    await Store.set('meta:regSeq', 0);
     await Store.set('meta:init', {at:nowISO(), version:'1.0'});
   }
   const s = await Store.get('settings'); if(s) State.settings=s;
+  await migrateRegNos();
   const sess = await Store.get('meta:session');
   if(sess){ const u = await Store.get('user:'+sess); if(u) State.session=u; }
+}
+
+/* ---------------- Registration numbers (sequential, immutable) ---------------- */
+const REG_PREFIX = 'KE';
+function formatReg(n){ return REG_PREFIX+'-'+String(n).padStart(4,'0'); }
+let _seqChain = Promise.resolve();
+function nextRegNo(){
+  const p = _seqChain.then(async ()=>{
+    let seq = (await Store.get('meta:regSeq'))||0; seq++;
+    await Store.set('meta:regSeq', seq);
+    return formatReg(seq);
+  });
+  _seqChain = p.catch(()=>{});
+  return p;
+}
+// Backfill any pre-existing executives that have no registration number (runs once).
+async function migrateRegNos(){
+  if(await Store.get('meta:regMigrated')) return;
+  const execs = await Store.getAll('exec:');
+  let seq = (await Store.get('meta:regSeq'))||0;
+  // never collide with numbers already present
+  execs.forEach(e=>{ if(e.regNo){ const m=String(e.regNo).match(/(\d+)\s*$/); if(m) seq=Math.max(seq, parseInt(m[1],10)); } });
+  const missing = execs.filter(e=>!e.regNo).sort((a,b)=> String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+  for(const e of missing){ seq++; e.regNo = formatReg(seq); await Store.set('exec:'+e.id, e); }
+  await Store.set('meta:regSeq', seq);
+  await Store.set('meta:regMigrated', {at:nowISO()});
 }
 
 /* ---------------- Auth ---------------- */
@@ -576,7 +606,7 @@ async function viewOrgDetail(level, id){
 function execItem(e){
   return `<div class="item" data-link="#/exec/${e.id}">
     <div class="av">${e.photo?`<img src="${e.photo}" alt="">`:initials(e.fullName)}</div>
-    <div class="body"><div class="nm">${esc(e.fullName)}</div><div class="mt">${esc(e.position||'—')} • ${esc(e.phone||'')}</div></div>
+    <div class="body"><div class="nm">${esc(e.fullName)}</div><div class="mt">${e.regNo?`<span class="reg">${esc(e.regNo)}</span> • `:''}${esc(e.position||'—')} • ${esc(e.phone||'')}</div></div>
     <div class="chev">›</div>
   </div>`;
 }
@@ -615,6 +645,9 @@ async function viewExecForm(execId, q){
   <div class="crumb"><a href="javascript:history.back()">‹ Back</a></div>
   <div class="section-head"><h2>${e?'Edit':'Register'} ${LVS[level]} executive</h2></div>
   <form id="execForm" class="card pad" data-level="${level}" data-id="${execId||''}">
+    <div class="field"><label>Registration number</label>
+      <input value="${e&&e.regNo?esc(e.regNo):''}" readonly placeholder="Assigned automatically on save" style="background:var(--green-soft);color:var(--green-dark);font-weight:700;letter-spacing:.04em">
+    </div>
     <div class="field"><label>Passport photograph <span class="req">*</span></label>
       <div class="photo-box">
         <label class="photo-prev" id="photoPrev">${e&&e.photo?`<img src="${e.photo}">`:'<span>No photo<br>added</span>'}</label>
@@ -696,10 +729,11 @@ async function saveExec(){
 
   const eid = id || uid();
   const existing = id? await Store.get('exec:'+id):null;
-  const final = Object.assign({}, existing||{}, rec, {id:eid, updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO(), createdBy:(existing&&existing.createdBy)||State.session.username});
+  const regNo = (existing && existing.regNo) ? existing.regNo : await nextRegNo();
+  const final = Object.assign({}, existing||{}, rec, {id:eid, regNo, updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO(), createdBy:(existing&&existing.createdBy)||State.session.username});
   await Store.set('exec:'+eid, final);
-  await audit(id?'UPDATE':'CREATE','executive',eid, (id?'Updated ':'Registered ')+rec.fullName+' ('+LVS[level]+')');
-  toast(id?'Changes saved':'Executive registered');
+  await audit(id?'UPDATE':'CREATE','executive',eid, (id?'Updated ':'Registered ')+rec.fullName+' ['+regNo+'] ('+LVS[level]+')');
+  toast(id?'Changes saved':'Registered as '+regNo);
   location.hash = '#/exec/'+eid; render();
 }
 
@@ -719,12 +753,14 @@ async function viewExecProfile(id){
     <div class="profile-top">
       ${e.photo?`<img class="profile-photo" src="${e.photo}" alt="${esc(e.fullName)}">`:`<div class="profile-photo" style="display:grid;place-items:center;color:var(--green);font-size:34px;font-weight:800">${initials(e.fullName)}</div>`}
       <div style="min-width:0;flex:1">
+        ${e.regNo?`<div class="reg-tag">${esc(e.regNo)}</div>`:''}
         <h2 style="font-size:20px">${esc(e.fullName)}</h2>
         <div style="margin:6px 0"><span class="badge">${esc(e.position||'—')}</span> <span class="badge ${e.level==='ward'?'k':e.level==='branch'?'y':'r'}">${LVS[e.level]}</span></div>
         <div class="small muted">${esc(parentName)}</div>
       </div>
     </div>
     <dl class="kv" style="margin-top:16px">
+      <dt>Registration no.</dt><dd><b>${esc(e.regNo||'—')}</b></dd>
       <dt>Phone</dt><dd>${esc(e.phone||'—')}</dd>
       <dt>Email</dt><dd>${esc(e.email||'—')}</dd>
       <dt>Gender</dt><dd>${esc((e.gender||'—').replace(/^./,c=>c.toUpperCase()))}</dd>
@@ -847,7 +883,7 @@ async function viewData(){
 
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:4px">Import executives</h3>
-    <p class="muted small" style="margin:0 0 12px">Upload a CSV matching the template. Wards, branches, and units are matched by name and created if missing. Rows are validated before import.</p>
+    <p class="muted small" style="margin:0 0 12px">Upload a CSV matching the template. Wards, branches, and units are matched by name and created if missing. Rows are validated before import. Registration numbers are assigned automatically.</p>
     <input type="file" id="csvIn" accept=".csv" class="hidden">
     <button class="btn" data-act="pickCsv">⬆ Choose CSV file</button>
     <div id="importReport" style="margin-top:12px"></div>
@@ -863,8 +899,9 @@ async function viewData(){
   </div>`;
 }
 const CSV_COLS = ['level','ward','branch','unit','fullName','position','gender','phone','email','dob','occupation','address','background'];
+const EXPORT_COLS = ['regNo'].concat(CSV_COLS);
 function csvEscape(v){ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
-function toCSV(rows){ return [CSV_COLS.join(',')].concat(rows.map(r=>CSV_COLS.map(c=>csvEscape(r[c])).join(','))).join('\n'); }
+function toCSV(rows, cols=CSV_COLS){ return [cols.join(',')].concat(rows.map(r=>cols.map(c=>csvEscape(r[c])).join(','))).join('\n'); }
 function parseCSV(text){
   const rows=[]; let i=0, field='', row=[], q=false;
   while(i<text.length){ const c=text[i];
@@ -882,8 +919,8 @@ async function exportExecsCSV(){
   const wn=id=>{const x=wards.find(w=>w.id===id);return x?x.name:'';};
   const bn=id=>{const x=branches.find(b=>b.id===id);return x?x.name:'';};
   const un=id=>{const x=units.find(u=>u.id===id);return x?x.name:'';};
-  const rows=execs.map(e=>({level:e.level, ward:e.level==='ward'?wn(e.wardId):(e.level==='branch'?wn((branches.find(b=>b.id===e.branchId)||{}).wardId):''), branch:e.level==='branch'?bn(e.branchId):(e.level==='unit'?bn((units.find(u=>u.id===e.unitId)||{}).branchId):''), unit:e.level==='unit'?un(e.unitId):'', fullName:e.fullName, position:e.position, gender:e.gender, phone:e.phone, email:e.email, dob:e.dob, occupation:e.occupation, address:e.address, background:e.background}));
-  download(`ndc_keten_executives_${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows),'text/csv');
+  const rows=execs.map(e=>({regNo:e.regNo||'', level:e.level, ward:e.level==='ward'?wn(e.wardId):(e.level==='branch'?wn((branches.find(b=>b.id===e.branchId)||{}).wardId):''), branch:e.level==='branch'?bn(e.branchId):(e.level==='unit'?bn((units.find(u=>u.id===e.unitId)||{}).branchId):''), unit:e.level==='unit'?un(e.unitId):'', fullName:e.fullName, position:e.position, gender:e.gender, phone:e.phone, email:e.email, dob:e.dob, occupation:e.occupation, address:e.address, background:e.background}));
+  download(`ndc_keten_executives_${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows, EXPORT_COLS),'text/csv');
   await audit('EXPORT','executive','','Exported '+rows.length+' executives to CSV');
   toast('Exported '+rows.length+' record(s)');
 }
@@ -915,7 +952,7 @@ async function importCSV(file){
     if(level==='branch'&&!branchId){ fail++; errs.push(`Row ${r+1}: branch name required`); continue; }
     if(level==='unit'&&!unitId){ fail++; errs.push(`Row ${r+1}: unit name required`); continue; }
     const id=uid();
-    const rec={id, level, fullName:g('fullName'), position:g('position'), gender:(g('gender').toLowerCase()), phone:g('phone'), email:g('email'), dob:g('dob'), occupation:g('occupation'), address:g('address'), background:g('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
+    const rec={id, regNo: await nextRegNo(), level, fullName:g('fullName'), position:g('position'), gender:(g('gender').toLowerCase()), phone:g('phone'), email:g('email'), dob:g('dob'), occupation:g('occupation'), address:g('address'), background:g('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
     rec[level+'Id'] = level==='ward'?wardId:level==='branch'?branchId:unitId;
     await Store.set('exec:'+id,rec); ok++;
   }

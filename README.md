@@ -23,6 +23,7 @@ Go to **Admin → Reset admin password** and change it immediately.
 ## Features
 
 - Three-tier registry with drill-down (Ward → Branch → Unit) and breadcrumb navigation.
+- Every executive receives a permanent, system-generated registration number (KE-0001, KE-0002, …), assigned in sequence and never changed.
 - Executive records with mandatory passport photo (camera or gallery), auto-compressed before saving.
 - Full validation, phone-based and name plus date-of-birth duplicate detection.
 - Dashboard: counts, gender distribution, coverage bars, recent activity.
