@@ -472,7 +472,7 @@ function wireLogin(){
    ============================================================ */
 async function viewDashboard(){
   const [wards,branches,units,execs,positions] = await Promise.all([Data.wards(),Data.branches(),Data.units(),Data.execs(),Data.positions()]);
-  const g = {male:0,female:0,other:0}; execs.forEach(e=>{ g[e.gender]=(g[e.gender]||0)+1; });
+  const g = {male:0,female:0}; execs.forEach(e=>{ g[e.gender]=(g[e.gender]||0)+1; });
   const tot = execs.length||1;
   // coverage: count org units with at least one exec
   const wardsCovered = new Set(execs.filter(e=>e.level==='ward').map(e=>e.wardId)).size;
@@ -484,12 +484,10 @@ async function viewDashboard(){
     <div class="bar">
       <i style="width:${g.male/tot*100}%;background:var(--green)"></i>
       <i style="width:${g.female/tot*100}%;background:var(--gold)"></i>
-      <i style="width:${(g.other||0)/tot*100}%;background:var(--red)"></i>
     </div>
     <div class="legend">
       <span><i class="dot" style="background:var(--green)"></i>Male <b>${g.male||0}</b></span>
       <span><i class="dot" style="background:var(--gold)"></i>Female <b>${g.female||0}</b></span>
-      <span><i class="dot" style="background:var(--red)"></i>Other <b>${g.other||0}</b></span>
     </div>`;
 
   return `
@@ -667,7 +665,7 @@ async function viewExecForm(execId, q){
     ${textField('fullName','Full name',e&&e.fullName,true)}
     ${selectField('position','Position / title',slate.map(p=>({v:p,t:p})),e&&e.position,true,true)}
     <div class="grid2">
-      ${selectField('gender','Gender',[{v:'male',t:'Male'},{v:'female',t:'Female'},{v:'other',t:'Other'}],e&&e.gender,true)}
+      ${selectField('gender','Gender',[{v:'male',t:'Male'},{v:'female',t:'Female'}],e&&e.gender,true)}
       ${textField('phone','Phone number',e&&e.phone,true,'tel')}
     </div>
     <div class="grid2">
@@ -793,7 +791,7 @@ async function viewSearch(q){
   <div class="searchbar"><input id="sq" placeholder="Search by name, position, phone…" value="${esc(q.q||'')}"><button class="btn primary" data-act="runSearch">Search</button></div>
   <div class="filters">
     <select id="flevel"><option value="">All levels</option><option value="ward">Ward</option><option value="branch">Branch</option><option value="unit">Unit</option></select>
-    <select id="fgender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+    <select id="fgender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
     <select id="fsort"><option value="name">Sort: Name</option><option value="position">Sort: Position</option><option value="recent">Sort: Recent</option></select>
   </div>
   <div id="results"><p class="muted small">${execs.length} executive(s) in the registry. Type to filter.</p></div>`;
@@ -828,12 +826,12 @@ function wireSearch(){
 async function viewReports(){
   const [wards,branches,units,execs,positions]=await Promise.all([Data.wards(),Data.branches(),Data.units(),Data.execs(),Data.positions()]);
   const byLevel = l=>execs.filter(e=>e.level===l);
-  const genderOf = arr=>{const g={male:0,female:0,other:0};arr.forEach(e=>g[e.gender]=(g[e.gender]||0)+1);return g;};
+  const genderOf = arr=>{const g={male:0,female:0};arr.forEach(e=>g[e.gender]=(g[e.gender]||0)+1);return g;};
   const lvRow = (l)=>{ const arr=byLevel(l); const g=genderOf(arr); const t=arr.length||1;
     return `<tr-row><div class="row small" style="padding:8px 0;border-bottom:1px solid var(--line)">
       <span style="font-weight:700;width:64px">${LVS[l]}</span>
-      <span class="bar" style="flex:1"><i style="width:${g.male/t*100}%;background:var(--green)"></i><i style="width:${g.female/t*100}%;background:var(--gold)"></i><i style="width:${g.other/t*100}%;background:var(--red)"></i></span>
-      <span class="muted tiny" style="width:118px;text-align:right">M ${g.male} • F ${g.female} • O ${g.other}</span>
+      <span class="bar" style="flex:1"><i style="width:${g.male/t*100}%;background:var(--green)"></i><i style="width:${g.female/t*100}%;background:var(--gold)"></i></span>
+      <span class="muted tiny" style="width:118px;text-align:right">M ${g.male} • F ${g.female}</span>
     </div></tr-row>`; };
 
   // incomplete coverage: units with no execs
@@ -846,7 +844,7 @@ async function viewReports(){
   <div class="card pad">
     <h3 style="font-size:15px;margin-bottom:6px">Gender distribution by level</h3>
     ${['ward','branch','unit'].map(lvRow).join('').replace(/<\/?tr-row>/g,'')}
-    <div class="legend"><span><i class="dot" style="background:var(--green)"></i>Male</span><span><i class="dot" style="background:var(--gold)"></i>Female</span><span><i class="dot" style="background:var(--red)"></i>Other</span></div>
+    <div class="legend"><span><i class="dot" style="background:var(--green)"></i>Male</span><span><i class="dot" style="background:var(--gold)"></i>Female</span></div>
   </div>
 
   <div class="card pad" style="margin-top:14px">
