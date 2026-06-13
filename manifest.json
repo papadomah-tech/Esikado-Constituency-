@@ -1,7 +1,7 @@
 {
-  "name": "Ghana NDC Executive Registry",
+  "name": "Keten Esikado NDC Executive Registry",
   "short_name": "NDC Registry",
-  "description": "National five-tier party executive registry for the NDC, covering all 16 regions and 276 constituencies of Ghana, with region- and constituency-level access.",
+  "description": "Three-tier party executive registry for the Keten Esikado Constituency NDC.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

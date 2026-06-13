@@ -343,9 +343,19 @@ const State = { session:null, settings:{}, currentCon:null };
 /* ---------------- Bootstrap / seed ---------------- */
 async function bootstrap(){
   const init = await Store.get('meta:init');
+  // Seed the default admin account independently of meta:init, and only if it
+  // doesn't already exist. This guarantees a changed admin password can never be
+  // silently reverted to the default, even if the init flag is lost on this device.
+  const existingAdmin = await Store.get('user:admin');
+  if(!existingAdmin){
+    await Store.set('user:admin', {id:'admin', username:'admin', password:'ndc2024', fullName:'National Administrator', role:'national_admin', scopeConstituencyId:null, mustChangePassword:true});
+  } else if(existingAdmin.password==='ndc2024' && !existingAdmin.mustChangePassword){
+    // An account still on the published default password (e.g. an existing
+    // install from before this safeguard existed) must change it on next login.
+    existingAdmin.mustChangePassword = true;
+    await Store.set('user:admin', existingAdmin);
+  }
   if(!init){
-    // default NATIONAL admin (LOCAL ONLY — change on first login; real auth via Supabase)
-    await Store.set('user:admin', {id:'admin', username:'admin', password:'ndc2024', fullName:'National Administrator', role:'national_admin', scopeConstituencyId:null});
     await Store.set('positions', DEFAULT_POSITIONS);
     await Store.set('settings', State.settings);
     await Store.set('meta:init', {at:nowISO(), version:'3.0'});
@@ -519,6 +529,7 @@ async function _render(){
   await ensureReady;
   const app=$('#app');
   if(!State.session){ app.innerHTML = viewLogin(); wireLogin(); return; }
+  if(State.session.mustChangePassword){ app.innerHTML = viewForcePasswordChange(); wireForcePasswordChange(); return; }
   const {parts,q}=parseHash();
   const route = parts[0]||'dashboard';
   // shell
@@ -617,6 +628,44 @@ function wireLogin(){
   $('[data-act=dologin]').addEventListener('click',go);
   $('#lp').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
   $('#lu').focus();
+}
+
+/* ============================================================
+   FORCED PASSWORD CHANGE (shown once, e.g. first login on a
+   fresh install, or any account still on the published default
+   password)
+   ============================================================ */
+function viewForcePasswordChange(){
+  return `<div class="login-wrap">
+    <div class="login-card">
+      <div class="login-brand">
+        <img class="login-logo" src="${LOGO_FULL}" alt="NDC logo" />
+        <div class="t1">Set a new password</div>
+        <div class="t2">For security, choose a new password for @${esc(State.session.username)} before continuing.</div>
+      </div>
+      <div class="field"><label>New password</label><input id="fpNew" type="password" autocomplete="new-password" placeholder="At least 4 characters" /></div>
+      <div class="field"><label>Confirm new password</label><input id="fpConfirm" type="password" autocomplete="new-password" placeholder="Repeat new password" /></div>
+      <button class="btn primary block" data-act="setPassword">Set password and continue</button>
+    </div>
+  </div>`;
+}
+function wireForcePasswordChange(){
+  const go = async ()=>{
+    const p1=$('#fpNew').value.trim(), p2=$('#fpConfirm').value.trim();
+    if(p1.length<4){ toast('Use at least 4 characters',true); return; }
+    if(p1!==p2){ toast('Passwords do not match',true); return; }
+    const u = await Store.get('user:'+State.session.username);
+    if(!u){ toast('Account record not found',true); return; }
+    u.password=p1; u.mustChangePassword=false;
+    await Store.set('user:'+State.session.username,u);
+    State.session = u;
+    await audit('UPDATE','user',State.session.username,'Set initial password');
+    toast('Password set');
+    location.hash='#/dashboard'; render();
+  };
+  $('[data-act=setPassword]').addEventListener('click',go);
+  $('#fpConfirm').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+  $('#fpNew').focus();
 }
 
 /* ============================================================
@@ -1536,14 +1585,30 @@ async function viewAdmin(){
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:6px">Security note</h3>
     <p class="muted small" style="margin:0">User accounts here are stored on this device only. For real multi-device authentication, scoped permissions, and audit integrity, connect the Supabase backend described in the deployment guide. Change the default admin password now.</p>
-    <div class="field" style="margin-top:10px"><label>Reset my password</label><input id="newPw" type="password" placeholder="New password"></div>
+    <div class="field" style="margin-top:10px"><label>Current password</label><input id="curPw" type="password" autocomplete="current-password" placeholder="Current password"></div>
+    <div class="field"><label>New password</label><input id="newPw" type="password" autocomplete="new-password" placeholder="At least 4 characters"></div>
+    <div class="field"><label>Confirm new password</label><input id="confirmPw" type="password" autocomplete="new-password" placeholder="Repeat new password"></div>
     <button class="btn sm" data-act="resetPw">Update password</button>
   </div>`;
 }
 function wireAdmin(){
   const nu=$('[data-act=newUser]'); if(nu) nu.onclick=newUserFlow;
   document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{ const go=await confirmModal('Remove user?','This removes login access for @'+b.dataset.id+'.'); if(go){ await Store.del('user:'+b.dataset.id); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); } });
-  $('[data-act=resetPw]').onclick=async()=>{ const pw=$('#newPw').value; if(pw.length<4){ toast('Use at least 4 characters',true); return; } const u=await Store.get('user:'+State.session.username); u.password=pw; await Store.set('user:'+State.session.username,u); State.session.password=pw; toast('Password updated'); };
+  $('[data-act=resetPw]').onclick=async()=>{
+    const curPw=$('#curPw').value.trim(), newPw=$('#newPw').value.trim(), confirmPw=$('#confirmPw').value.trim();
+    const u=await Store.get('user:'+State.session.username);
+    if(!u){ toast('Could not find your account record',true); return; }
+    if(u.password!==curPw){ toast('Current password is incorrect',true); return; }
+    if(newPw.length<4){ toast('New password must be at least 4 characters',true); return; }
+    if(newPw!==confirmPw){ toast('New passwords do not match',true); return; }
+    if(newPw===curPw){ toast('New password must be different from the current password',true); return; }
+    u.password=newPw; u.mustChangePassword=false;
+    await Store.set('user:'+State.session.username,u);
+    State.session=u;
+    await audit('UPDATE','user',State.session.username,'Changed password');
+    $('#curPw').value=''; $('#newPw').value=''; $('#confirmPw').value='';
+    toast('Password updated');
+  };
 }
 async function newUserFlow(){
   const g = await loadGraph();

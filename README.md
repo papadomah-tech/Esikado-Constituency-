@@ -26,7 +26,15 @@ Open the app and log in with:
 - **Username:** `admin`
 - **Password:** `ndc2024`
 
-This is the **National Administrator** account. Go to **Admin, Reset my password** and change it immediately.
+This is the **National Administrator** account. On first login (and on any device where this account is still on the published default password), you will be required to set a new password immediately, before the rest of the app becomes available. The default password stops working on that device the moment a new one is set.
+
+To change your password again later, go to **Admin** and use **Reset my password**, which requires your current password plus a confirmation of the new one.
+
+### Important: this is a per-device security boundary
+
+Because this app stores its data locally on each device (see "How data is stored" below), the `admin` / `ndc2024` default is only ever a one-time setup credential **for the device it is used on**. Changing the password on one phone or computer does not change it on any other device: each device that has never had this account log in will still offer `admin` / `ndc2024` as the starting credential, and will immediately force a new password to be set on first use there too.
+
+If staff were given the shared `admin` / `ndc2024` credential during rollout, treat every device that login was used on as needing its own password change (or, better, create individually named accounts from **Admin, + User** and stop using the shared `admin` account for day-to-day access).
 
 ## Roles and access
 
