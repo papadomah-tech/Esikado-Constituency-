@@ -8,8 +8,9 @@ A working, offline-first Progressive Web App for registering and managing party 
 |---|---|
 | `index.html` | The entire application (UI, logic, storage). |
 | `manifest.json` | PWA manifest so the app installs to a phone home screen. |
-| `sw.js` | Service worker for offline app-shell caching (cache bumped to v7 for this release). |
+| `sw.js` | Service worker for offline app-shell caching (cache bumped to v8 for this release). |
 | `icon-192.png`, `icon-512.png` | App icons (umbrella mark). |
+| `Dockerfile`, `nginx.conf`, `docker-compose.yml`, `.dockerignore` | Container build for deploying the app as a static site (see "Deploy with Docker" below). |
 
 ## Organisational structure
 
@@ -90,7 +91,35 @@ Region codes and constituency codes are also kept distinct from each other natio
 
 Because everything is relative-pathed, no configuration is needed for the subpath. The service worker scope and manifest already use `./`.
 
+## Deploy with Docker
+
+The app is a static site (no server-side code, no database connection of its own), so the `Dockerfile` simply packages `index.html`, `manifest.json`, `sw.js`, and the two icon files into a small `nginx:alpine` image and serves them.
+
+Build and run locally:
+
+```
+docker build -t ndc-registry .
+docker run -p 8080:8080 ndc-registry
+```
+
+or with Docker Compose:
+
+```
+docker compose up --build
+```
+
+Then open `http://localhost:8080`.
+
+### Notes for hosting platforms (for example Supabase)
+
+- The container listens on port **8080** and exposes a `GET /healthz` endpoint that returns `200 ok`, for platforms that require a health check.
+- `index.html` and `sw.js` are served with `Cache-Control: no-cache, no-store, must-revalidate` so that every deploy reaches users immediately and the service worker's own `CACHE` version (bumped on each release) takes effect right away. The PWA's offline support still works because the service worker caches the app shell client-side after the first successful load.
+- `manifest.json` and the icons are served with a short cache lifetime (`max-age=3600`).
+- Because all data is stored locally in each user's browser (see "How data is stored" below), this container is stateless: it serves the same static files to every user, and there is nothing to back up or persist on the server side. No environment variables, database connection, or secrets are required.
+- If the platform expects the app to live at a sub-path rather than the domain root, the relative-pathed assets (`./manifest.json`, `./sw.js`, `./icon-*.png`) and the manifest's `start_url`/`scope` (`./`) should continue to work without changes, as long as the platform serves `index.html` at that sub-path's root.
+
 ## Upgrading from v2.0 (Western Region only)
+
 
 If this app is replacing a v2.0 (Western Region only) install on the same device, opening it the first time after the update runs a one-time migration automatically:
 

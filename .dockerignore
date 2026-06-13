@@ -1,0 +1,7 @@
+node_modules
+*.md
+test_*.js
+generate_codes.js
+.git
+.gitignore
+*.log
