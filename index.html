@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0A6B3B" />
+<title>Keten Esikado NDC Registry</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<style>
+:root{
+  --green:#0A6B3B; --green-dark:#064d2a; --green-soft:#e7f1ec;
+  --red:#CE1126; --red-soft:#fbe7e9; --gold:#F2B705;
+  --ink:#16241c; --muted:#5f6f64; --bg:#f3f6f3; --surface:#ffffff;
+  --line:#e1e8e2; --line-strong:#cdd8cf; --shadow:0 1px 2px rgba(16,40,28,.06),0 8px 24px rgba(16,40,28,.06);
+  --radius:14px; --radius-sm:10px;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.45;font-size:15px}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:15px}
+a{color:var(--green);text-decoration:none}
+h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
+.hidden{display:none!important}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------- App frame ---------- */
+#app{max-width:760px;margin:0 auto;min-height:100vh;background:var(--bg);display:flex;flex-direction:column}
+.topbar{position:sticky;top:0;z-index:20;background:var(--green);color:#fff;padding:env(safe-area-inset-top) 0 0}
+.topbar-in{display:flex;align-items:center;gap:11px;padding:13px 16px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.umbrella{flex:0 0 auto}
+.brand-txt{min-width:0}
+.brand-txt .t1{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.78;font-weight:700}
+.brand-txt .t2{font-size:15.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.sync-dot{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;background:rgba(255,255,255,.16);padding:5px 9px;border-radius:999px}
+.sync-dot i{width:7px;height:7px;border-radius:50%;background:var(--gold);display:inline-block}
+.sync-dot.online i{background:#7BE29B}
+.iconbtn{background:rgba(255,255,255,.14);border:0;color:#fff;width:34px;height:34px;border-radius:9px;font-size:15px;display:grid;place-items:center}
+.iconbtn:hover{background:rgba(255,255,255,.24)}
+
+/* ---------- Tab nav ---------- */
+.tabs{display:flex;overflow-x:auto;background:var(--green-dark);scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs a{color:rgba(255,255,255,.74);padding:11px 15px;font-size:13px;font-weight:600;white-space:nowrap;border-bottom:3px solid transparent}
+.tabs a.active{color:#fff;border-bottom-color:var(--gold)}
+
+.content{flex:1;padding:16px 16px 90px}
+
+/* ---------- Cards & layout ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card.pad{padding:16px}
+.section-head{display:flex;align-items:center;gap:10px;margin:4px 2px 12px}
+.section-head h2{font-size:19px;font-weight:800}
+.section-head .sub{color:var(--muted);font-size:13px}
+.spacer{flex:1}
+.row{display:flex;gap:10px;align-items:center}
+.wrap{flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid-stat{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
+@media(min-width:560px){.grid-stat{grid-template-columns:repeat(4,1fr)}}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.tiny{font-size:11.5px}
+
+/* ---------- Buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);padding:10px 14px;border-radius:var(--radius-sm);font-weight:700;font-size:14px;transition:filter .12s,background .12s}
+.btn:hover{background:#f7faf8}
+.btn.primary{background:var(--green);border-color:var(--green);color:#fff}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.danger{background:var(--red);border-color:var(--red);color:#fff}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--green)}
+.btn.sm{padding:7px 11px;font-size:13px}
+.btn.block{width:100%}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ---------- Stat tiles ---------- */
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;position:relative;overflow:hidden}
+.stat .n{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1}
+.stat .l{font-size:12px;color:var(--muted);font-weight:600;margin-top:6px;text-transform:uppercase;letter-spacing:.04em}
+.stat .ico{position:absolute;right:10px;top:10px;opacity:.13}
+.stat.g{border-top:3px solid var(--green)}
+.stat.r{border-top:3px solid var(--red)}
+.stat.y{border-top:3px solid var(--gold)}
+.stat.k{border-top:3px solid var(--ink)}
+
+/* ---------- List items ---------- */
+.list{display:flex;flex-direction:column;gap:9px}
+.item{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:11px 13px;box-shadow:var(--shadow);transition:border-color .12s}
+.item:hover{border-color:var(--line-strong)}
+.item .av{flex:0 0 auto;width:46px;height:46px;border-radius:11px;object-fit:cover;background:var(--green-soft);display:grid;place-items:center;color:var(--green);font-weight:800;font-size:16px;overflow:hidden}
+.item .av img{width:100%;height:100%;object-fit:cover}
+.item .body{min-width:0;flex:1}
+.item .body .nm{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .body .mt{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .chev{color:var(--line-strong);font-size:20px}
+.item.org{cursor:pointer}
+.org .icoo{flex:0 0 auto;width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-size:18px}
+.org .icoo.w{background:var(--green-soft);color:var(--green)}
+.org .icoo.b{background:#eef0fa;color:#4753b8}
+.org .icoo.u{background:#fdf1e3;color:#b5751a}
+
+/* ---------- Badges & pills ---------- */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--green-soft);color:var(--green-dark)}
+.badge.r{background:var(--red-soft);color:var(--red)}
+.badge.k{background:#eceeec;color:var(--ink)}
+.badge.y{background:#fdf3d4;color:#8a6400}
+.pip-row{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}
+.pip{width:9px;height:9px;border-radius:3px;background:var(--line-strong)}
+.pip.on{background:var(--green)}
+
+/* ---------- Forms ---------- */
+.field{margin-bottom:13px}
+.field label{display:block;font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:5px}
+.field label .req{color:var(--red)}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:#fff;color:var(--ink)}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--green);outline-offset:1px;border-color:var(--green)}
+.field textarea{min-height:74px;resize:vertical}
+.field .err{color:var(--red);font-size:12px;margin-top:4px;font-weight:600}
+.field.bad input,.field.bad select,.field.bad textarea{border-color:var(--red)}
+
+/* ---------- Photo control ---------- */
+.photo-box{display:flex;gap:14px;align-items:center}
+.photo-prev{width:104px;height:128px;border-radius:12px;border:2px dashed var(--line-strong);background:var(--green-soft);display:grid;place-items:center;overflow:hidden;flex:0 0 auto;color:var(--muted);text-align:center;font-size:12px;padding:8px}
+.photo-prev img{width:100%;height:100%;object-fit:cover}
+.photo-actions{display:flex;flex-direction:column;gap:8px;flex:1}
+
+/* ---------- Search bar ---------- */
+.searchbar{display:flex;gap:8px;margin-bottom:13px}
+.searchbar input{flex:1;padding:11px 13px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:#fff}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:13px}
+.filters select{padding:8px 10px;border:1px solid var(--line-strong);border-radius:9px;background:#fff;font-size:13px;font-weight:600}
+
+/* ---------- Bars (gender / coverage) ---------- */
+.bar{height:12px;border-radius:999px;background:var(--line);overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;font-weight:600}
+.legend span{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.legend span b{color:var(--ink)}
+.dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* ---------- Breadcrumb ---------- */
+.crumb{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-bottom:12px;font-weight:600}
+.crumb a{color:var(--muted)}
+.crumb a:hover{color:var(--green)}
+.crumb .sep{opacity:.5}
+
+/* ---------- Profile ---------- */
+.profile-top{display:flex;gap:16px;align-items:flex-start}
+.profile-photo{width:118px;height:144px;border-radius:14px;object-fit:cover;background:var(--green-soft);flex:0 0 auto;box-shadow:var(--shadow)}
+.kv{display:grid;grid-template-columns:128px 1fr;gap:8px 12px;font-size:14px;margin-top:6px}
+.kv dt{color:var(--muted);font-weight:600}
+.kv dd{margin:0;font-weight:600;word-break:break-word}
+
+/* ---------- Empty / toast / modal ---------- */
+.empty{text-align:center;padding:40px 16px;color:var(--muted)}
+.empty .e-ico{font-size:40px;opacity:.4;margin-bottom:8px}
+.empty h3{font-size:16px;color:var(--ink);margin-bottom:6px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:12px 18px;border-radius:11px;font-weight:600;font-size:14px;opacity:0;transition:.25s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:90%;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--red)}
+.modal-bg{position:fixed;inset:0;background:rgba(16,36,24,.5);display:grid;place-items:center;z-index:50;padding:18px}
+.modal{background:#fff;border-radius:16px;max-width:420px;width:100%;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal h3{font-size:17px;margin-bottom:8px}
+.modal p{color:var(--muted);font-size:14px;margin:0 0 16px}
+.modal .acts{display:flex;gap:10px;justify-content:flex-end}
+
+/* ---------- Login ---------- */
+.login-wrap{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:24px;background:linear-gradient(160deg,var(--green) 0%,var(--green-dark) 70%);}
+.login-card{background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:380px;box-shadow:0 24px 60px rgba(0,0,0,.28)}
+.login-brand{text-align:center;margin-bottom:22px}
+.login-brand .t1{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.login-brand .t2{font-size:21px;font-weight:800;color:var(--green-dark);margin-top:3px}
+.login-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:16px;line-height:1.5}
+.fab{position:fixed;right:max(16px,calc(50% - 380px + 16px));bottom:22px;z-index:25;background:var(--red);color:#fff;border:0;height:54px;padding:0 20px;border-radius:999px;font-weight:800;font-size:15px;box-shadow:0 10px 26px rgba(206,17,38,.4);display:inline-flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+<div id="app"><div class="login-wrap"><div class="muted">Loading…</div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   Keten Esikado Constituency NDC Party Management System
+   Single-file offline-first PWA.
+   Data layer abstracts over window.storage (in-app preview) and
+   IndexedDB (when deployed), so the UI never changes if you later
+   swap in Supabase behind the same async key/value interface.
+   ============================================================ */
+
+/* ---------------- Storage layer (KV) ---------------- */
+const Store = (() => {
+  const native = (typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function');
+  let dbP;
+  function idb(){
+    if(!dbP){ dbP = new Promise((res,rej)=>{
+      const r = indexedDB.open('ndc_keten_db',1);
+      r.onupgradeneeded = ()=> r.result.createObjectStore('kv');
+      r.onsuccess = ()=> res(r.result);
+      r.onerror = ()=> rej(r.error);
+    }); }
+    return dbP;
+  }
+  const tx = async (mode,fn)=>{ const db=await idb(); return new Promise((res,rej)=>{ const t=db.transaction('kv',mode).objectStore('kv'); const rq=fn(t); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); };
+  async function idbKeys(prefix){ const db=await idb(); return new Promise((res,rej)=>{ const out=[]; const c=db.transaction('kv','readonly').objectStore('kv').openKeyCursor(); c.onsuccess=e=>{ const cur=e.target.result; if(cur){ const k=String(cur.key); if(!prefix||k.startsWith(prefix)) out.push(k); cur.continue(); } else res(out); }; c.onerror=()=>rej(c.error); }); }
+
+  async function get(k){
+    if(native){ try{ const r=await window.storage.get(k,false); return r? JSON.parse(r.value):null; }catch{ return null; } }
+    const v=await tx('readonly',s=>s.get(k)); return v? JSON.parse(v):null;
+  }
+  async function set(k,v){ const s=JSON.stringify(v);
+    if(native){ await window.storage.set(k,s,false); return; }
+    await tx('readwrite',st=>st.put(s,k));
+  }
+  async function del(k){
+    if(native){ try{ await window.storage.delete(k,false); }catch{} return; }
+    await tx('readwrite',st=>st.delete(k));
+  }
+  async function keys(prefix){
+    if(native){ try{ const r=await window.storage.list(prefix,false); return (r&&r.keys)||[]; }catch{ return []; } }
+    return idbKeys(prefix);
+  }
+  async function getAll(prefix){ const ks=await keys(prefix); const out=[]; for(const k of ks){ const v=await get(k); if(v) out.push(v); } return out; }
+  return {get,set,del,keys,getAll,backend: native?'window.storage':'IndexedDB'};
+})();
+
+/* ---------------- Helpers ---------------- */
+const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const nowISO = ()=> new Date().toISOString();
+const $ = (s,r=document)=> r.querySelector(s);
+const esc = (s)=> (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const initials = (n)=> (n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+const fmtDate = (iso)=>{ if(!iso) return '—'; const d=new Date(iso); return isNaN(d)? '—' : d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); };
+const age = (dob)=>{ if(!dob) return null; const d=new Date(dob); if(isNaN(d)) return null; const t=new Date(); let a=t.getFullYear()-d.getFullYear(); const m=t.getMonth()-d.getMonth(); if(m<0||(m===0&&t.getDate()<d.getDate())) a--; return a; };
+function toast(msg,err){ const t=$('#toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); clearTimeout(t._t); t._t=setTimeout(()=>t.className='toast',2600); }
+const LV = {ward:'Ward / Electoral Area', branch:'Branch', unit:'Unit / Polling Station'};
+const LVS = {ward:'Ward', branch:'Branch', unit:'Unit'};
+
+/* ---------------- Audit ---------------- */
+async function audit(action, entityType, entityId, detail){
+  const u = State.session;
+  const rec = {id:uid(), ts:nowISO(), user:(u?u.username:'system'), role:(u?u.role:''), action, entityType, entityId, detail:detail||''};
+  await Store.set('audit:'+rec.id, rec);
+}
+
+/* ---------------- Default positions slate ---------------- */
+const DEFAULT_POSITIONS = [
+  {title:'Chairman', levels:['ward','branch']},
+  {title:'Vice Chairman', levels:['ward','branch']},
+  {title:'Secretary', levels:['ward','branch','unit']},
+  {title:'Deputy Secretary', levels:['ward','branch']},
+  {title:'Organizer', levels:['ward','branch','unit']},
+  {title:'Deputy Organizer', levels:['ward','branch']},
+  {title:'Treasurer', levels:['ward','branch']},
+  {title:"Women's Organizer", levels:['ward','branch','unit']},
+  {title:'Youth Organizer', levels:['ward','branch','unit']},
+  {title:'Communication Officer', levels:['ward','branch']},
+  {title:'Polling Station Executive', levels:['unit']},
+  {title:'Electoral Area Coordinator', levels:['ward']},
+];
+
+/* ---------------- App state ---------------- */
+const State = { session:null, settings:{constituency:'Keten Esikado', region:'Western'} };
+
+/* ---------------- Bootstrap / seed ---------------- */
+async function bootstrap(){
+  const init = await Store.get('meta:init');
+  if(!init){
+    // default admin (LOCAL ONLY — change on first login; real auth via Supabase)
+    await Store.set('user:admin', {id:'admin', username:'admin', password:'ndc2024', fullName:'Constituency Admin', role:'constituency_admin'});
+    await Store.set('positions', DEFAULT_POSITIONS);
+    await Store.set('settings', State.settings);
+    await Store.set('meta:init', {at:nowISO(), version:'1.0'});
+  }
+  const s = await Store.get('settings'); if(s) State.settings=s;
+  const sess = await Store.get('meta:session');
+  if(sess){ const u = await Store.get('user:'+sess); if(u) State.session=u; }
+}
+
+/* ---------------- Auth ---------------- */
+async function login(username, password){
+  const u = await Store.get('user:'+username);
+  if(!u || u.password!==password){ return false; }
+  State.session = u;
+  await Store.set('meta:session', username);
+  await audit('LOGIN','user',username,'');
+  return true;
+}
+async function logout(){ await audit('LOGOUT','user',State.session?State.session.username:'',''); State.session=null; await Store.del('meta:session'); location.hash='#/login'; render(); }
+function can(action){
+  const r = State.session && State.session.role;
+  if(r==='constituency_admin') return true;
+  if(r==='viewer') return action==='view'||action==='export';
+  // ward_admin / branch_admin: write within scope (scope checks applied at data level in this v1)
+  return ['view','create','edit','delete','export','import'].includes(action);
+}
+
+/* ---------------- Data accessors ---------------- */
+const Data = {
+  wards: ()=> Store.getAll('ward:'),
+  branches: ()=> Store.getAll('branch:'),
+  units: ()=> Store.getAll('unit:'),
+  execs: ()=> Store.getAll('exec:'),
+  users: ()=> Store.getAll('user:'),
+  positions: async ()=> (await Store.get('positions'))||DEFAULT_POSITIONS,
+  audits: async ()=> (await Store.getAll('audit:')).sort((a,b)=> b.ts.localeCompare(a.ts)),
+  get: (k)=> Store.get(k),
+};
+function posForLevel(positions, level){ return positions.filter(p=>p.levels.includes(level)).map(p=>p.title); }
+
+/* ---------------- Photo capture + compression ---------------- */
+function compressImage(file, maxDim=620, quality=0.72){
+  return new Promise((res,rej)=>{
+    const img=new Image(); const url=URL.createObjectURL(file);
+    img.onload=()=>{ URL.revokeObjectURL(url);
+      let w=img.width,h=img.height;
+      if(w>h && w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; }
+      else if(h>=w && h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
+      res(c.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=rej; img.src=url;
+  });
+}
+
+/* ============================================================
+   ROUTER
+   ============================================================ */
+function parseHash(){
+  const h = location.hash.replace(/^#/,'')||'/dashboard';
+  const [path,qs] = h.split('?');
+  const parts = path.split('/').filter(Boolean);
+  const q = Object.fromEntries(new URLSearchParams(qs||''));
+  return {parts,q};
+}
+let _rendering=false, _pending=false;
+async function render(){
+  if(_rendering){ _pending=true; return; }
+  _rendering=true;
+  try{ await _render(); }
+  finally{ _rendering=false; if(_pending){ _pending=false; render(); } }
+}
+async function _render(){
+  await ensureReady;
+  const app=$('#app');
+  if(!State.session){ app.innerHTML = viewLogin(); wireLogin(); return; }
+  const {parts,q}=parseHash();
+  const route = parts[0]||'dashboard';
+  // shell
+  app.innerHTML = shell(route);
+  const c = $('#content');
+  try{
+    if(route==='dashboard'){ c.innerHTML = await viewDashboard(); }
+    else if(route==='wards'){ c.innerHTML = await viewOrgList('ward'); }
+    else if(route==='ward'){ c.innerHTML = await viewOrgDetail('ward', parts[1]); }
+    else if(route==='branch'){ c.innerHTML = await viewOrgDetail('branch', parts[1]); }
+    else if(route==='unit'){ c.innerHTML = await viewOrgDetail('unit', parts[1]); }
+    else if(route==='exec'){
+      if(parts[1]==='new'){ c.innerHTML = await viewExecForm(null,q); wireExecForm(); }
+      else if(parts[2]==='edit'){ c.innerHTML = await viewExecForm(parts[1],q); wireExecForm(); }
+      else { c.innerHTML = await viewExecProfile(parts[1]); }
+    }
+    else if(route==='search'){ c.innerHTML = await viewSearch(q); wireSearch(); }
+    else if(route==='reports'){ c.innerHTML = await viewReports(); }
+    else if(route==='data'){ c.innerHTML = await viewData(); wireData(); }
+    else if(route==='admin'){ c.innerHTML = await viewAdmin(); wireAdmin(); }
+    else if(route==='audit'){ c.innerHTML = await viewAudit(); }
+    else { c.innerHTML = await viewDashboard(); }
+  }catch(e){ console.error(e); c.innerHTML = `<div class="empty"><div class="e-ico">⚠️</div><h3>Something went wrong</h3><p class="muted">${esc(e.message)}</p></div>`; }
+  wireGlobal();
+  updateSync();
+}
+
+/* ============================================================
+   SHELL
+   ============================================================ */
+const UMBRELLA = `<svg class="umbrella" width="26" height="26" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+  <path d="M24 6c-10 0-18 7-19.5 16C9 18 15 16 24 16s15 2 19.5 6C42 13 34 6 24 6Z" fill="#fff"/>
+  <path d="M24 16v22c0 3-2.5 5-5.5 5S13 41 13 38" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="24" cy="6.5" r="2" fill="#F2B705"/>
+</svg>`;
+function tab(route,active,href,label){ return `<a href="${href}" class="${route===active?'active':''}">${label}</a>`; }
+function shell(active){
+  const isAdmin = State.session.role==='constituency_admin';
+  return `
+  <div class="topbar">
+    <div class="topbar-in">
+      <div class="brand">${UMBRELLA}
+        <div class="brand-txt">
+          <div class="t1">NDC • ${esc(State.settings.constituency)}</div>
+          <div class="t2">Executive Registry</div>
+        </div>
+      </div>
+      <div class="right">
+        <span class="sync-dot" id="syncDot"><i></i><span id="syncTxt">Local</span></span>
+        <button class="iconbtn" data-act="logout" title="Sign out">⏻</button>
+      </div>
+    </div>
+    <nav class="tabs">
+      ${tab('dashboard',active,'#/dashboard','Dashboard')}
+      ${tab('wards',active,'#/wards','Registry')}
+      ${tab('search',active,'#/search','Search')}
+      ${tab('reports',active,'#/reports','Reports')}
+      ${tab('data',active,'#/data','Data')}
+      ${tab('audit',active,'#/audit','Activity')}
+      ${isAdmin?tab('admin',active,'#/admin','Admin'):''}
+    </nav>
+  </div>
+  <div class="content" id="content"></div>`;
+}
+
+/* ============================================================
+   LOGIN
+   ============================================================ */
+function viewLogin(){
+  return `<div class="login-wrap">
+    <div class="login-card">
+      <div class="login-brand">
+        <div style="display:flex;justify-content:center;margin-bottom:10px">
+          <div style="background:var(--green);width:56px;height:56px;border-radius:16px;display:grid;place-items:center">${UMBRELLA.replace('width="26" height="26"','width="34" height="34"')}</div>
+        </div>
+        <div class="t1">NDC • Keten Esikado Constituency</div>
+        <div class="t2">Party Executive Registry</div>
+      </div>
+      <div class="field"><label>Username</label><input id="lu" autocomplete="username" placeholder="admin" /></div>
+      <div class="field"><label>Password</label><input id="lp" type="password" autocomplete="current-password" placeholder="••••••••" /></div>
+      <button class="btn primary block" data-act="dologin">Sign in</button>
+      <div class="login-note">First-time sign in: <b>admin</b> / <b>ndc2024</b> — change it under Admin after logging in. Sign-in is local to this device until you connect the cloud backend.</div>
+    </div>
+  </div>`;
+}
+function wireLogin(){
+  const go = async ()=>{ const u=$('#lu').value.trim(), p=$('#lp').value; if(!u||!p){ toast('Enter username and password',true); return; } const ok=await login(u,p); if(ok){ location.hash='#/dashboard'; render(); } else toast('Wrong username or password',true); };
+  $('[data-act=dologin]').addEventListener('click',go);
+  $('#lp').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+  $('#lu').focus();
+}
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+async function viewDashboard(){
+  const [wards,branches,units,execs,positions] = await Promise.all([Data.wards(),Data.branches(),Data.units(),Data.execs(),Data.positions()]);
+  const g = {male:0,female:0,other:0}; execs.forEach(e=>{ g[e.gender]=(g[e.gender]||0)+1; });
+  const tot = execs.length||1;
+  // coverage: count org units with at least one exec
+  const wardsCovered = new Set(execs.filter(e=>e.level==='ward').map(e=>e.wardId)).size;
+  const branchCovered = new Set(execs.filter(e=>e.level==='branch').map(e=>e.branchId)).size;
+  const unitCovered = new Set(execs.filter(e=>e.level==='unit').map(e=>e.unitId)).size;
+  const recent = (await Data.audits()).slice(0,6);
+
+  const genderBar = `
+    <div class="bar">
+      <i style="width:${g.male/tot*100}%;background:var(--green)"></i>
+      <i style="width:${g.female/tot*100}%;background:var(--gold)"></i>
+      <i style="width:${(g.other||0)/tot*100}%;background:var(--red)"></i>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--green)"></i>Male <b>${g.male||0}</b></span>
+      <span><i class="dot" style="background:var(--gold)"></i>Female <b>${g.female||0}</b></span>
+      <span><i class="dot" style="background:var(--red)"></i>Other <b>${g.other||0}</b></span>
+    </div>`;
+
+  return `
+  <div class="section-head"><h2>Overview</h2><span class="spacer"></span><span class="badge k">${esc(State.session.fullName||State.session.username)}</span></div>
+  <div class="grid-stat">
+    <div class="stat g"><div class="n">${execs.length}</div><div class="l">Executives</div></div>
+    <div class="stat k"><div class="n">${wards.length}</div><div class="l">Wards</div></div>
+    <div class="stat y"><div class="n">${branches.length}</div><div class="l">Branches</div></div>
+    <div class="stat r"><div class="n">${units.length}</div><div class="l">Units</div></div>
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <div class="row"><h3 style="font-size:15px">Gender distribution</h3></div>
+    <div style="margin-top:12px">${execs.length?genderBar:'<p class="muted small" style="margin:6px 0 0">No executives registered yet.</p>'}</div>
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:12px">Coverage</h3>
+    ${covRow('Wards with executives', wardsCovered, wards.length)}
+    ${covRow('Branches with executives', branchCovered, branches.length)}
+    ${covRow('Units with executives', unitCovered, units.length)}
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:10px">Recent activity</h3>
+    ${recent.length? recent.map(a=>`<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="badge ${a.action==='DELETE'?'r':a.action.startsWith('CREATE')?'':'k'}">${esc(a.action)}</span><span class="muted" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.detail||a.entityType)}</span><span class="tiny muted">${fmtDate(a.ts)}</span></div>`).join('') : '<p class="muted small">No activity yet.</p>'}
+  </div>
+
+  <a class="fab" href="#/wards" title="Open registry">＋ Register</a>`;
+}
+function covRow(label, n, total){
+  const pct = total? Math.round(n/total*100):0;
+  return `<div style="margin-bottom:12px">
+    <div class="row small" style="margin-bottom:5px"><span style="font-weight:600">${label}</span><span class="spacer"></span><span class="muted">${n}/${total} (${pct}%)</span></div>
+    <div class="bar"><i style="width:${pct}%;background:${pct>=66?'var(--green)':pct>=33?'var(--gold)':'var(--red)'}"></i></div>
+  </div>`;
+}
+
+/* ============================================================
+   REGISTRY — org unit lists & details
+   ============================================================ */
+async function viewOrgList(level){
+  // top-level registry view = wards; with quick links to branches/units overview
+  const wards = (await Data.wards()).sort((a,b)=>a.name.localeCompare(b.name));
+  const branches = await Data.branches(); const units = await Data.units(); const execs = await Data.execs();
+  const wardExecCount = id => execs.filter(e=>e.level==='ward'&&e.wardId===id).length;
+  const wardBranchCount = id => branches.filter(b=>b.wardId===id).length;
+
+  const head = `
+  <div class="section-head"><h2>Registry</h2><span class="sub">Wards → Branches → Units</span><span class="spacer"></span>
+    ${can('create')?`<button class="btn primary sm" data-act="newWard">＋ Ward</button>`:''}
+  </div>`;
+
+  if(!wards.length){
+    return head + emptyState('🗂️','No wards yet','Create a Ward / Electoral Area to begin registering executives.', can('create')?`<button class="btn primary" data-act="newWard">＋ Add ward</button>`:'');
+  }
+  return head + `<div class="list">` + wards.map(w=>`
+    <div class="item org" data-link="#/ward/${w.id}">
+      <div class="icoo w">🏛️</div>
+      <div class="body"><div class="nm">${esc(w.name)}</div>
+        <div class="mt">${wardBranchCount(w.id)} branch(es) • ${wardExecCount(w.id)} ward exec(s)${w.code?' • '+esc(w.code):''}</div></div>
+      <div class="chev">›</div>
+    </div>`).join('') + `</div>`;
+}
+
+async function viewOrgDetail(level, id){
+  const node = await Store.get(level+':'+id);
+  if(!node) return emptyState('🚫','Not found','This record may have been deleted.');
+  const positions = await Data.positions();
+  const execs = await Data.execs();
+  const ownExecs = execs.filter(e=> e.level===level && e[level+'Id']===id );
+  const slate = posForLevel(positions, level);
+  const filled = new Set(ownExecs.map(e=>e.position));
+  // children
+  let children=[], childLevel=null, childLabel='';
+  if(level==='ward'){ childLevel='branch'; childLabel='Branches'; children=(await Data.branches()).filter(b=>b.wardId===id); }
+  else if(level==='branch'){ childLevel='unit'; childLabel='Units / Polling stations'; children=(await Data.units()).filter(u=>u.branchId===id); }
+
+  const crumbs = await buildCrumb(level,node);
+  const execCounts = {};
+  if(childLevel){ const allEx = execs; children.forEach(ch=> execCounts[ch.id]= allEx.filter(e=>e.level===childLevel&&e[childLevel+'Id']===ch.id).length ); }
+
+  return `
+  ${crumbs}
+  <div class="section-head"><h2>${esc(node.name)}</h2><span class="badge ${level==='ward'?'':level==='branch'?'y':'r'}">${LVS[level]}</span><span class="spacer"></span>
+    ${can('edit')?`<button class="btn sm" data-act="editOrg" data-level="${level}" data-id="${id}">Edit</button>`:''}
+    ${can('delete')?`<button class="btn sm danger" data-act="delOrg" data-level="${level}" data-id="${id}">Delete</button>`:''}
+  </div>
+
+  <div class="card pad">
+    <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">${LVS[level]} executives</h3><span class="badge k">${ownExecs.length}</span><span class="spacer"></span>
+      ${can('create')?`<button class="btn primary sm" data-link="#/exec/new?level=${level}&parent=${id}">＋ Add</button>`:''}
+    </div>
+    <div class="small muted" style="margin-bottom:8px">Positions filled: ${filled.size}/${slate.length}
+      <div class="pip-row">${slate.map(p=>`<span class="pip ${filled.has(p)?'on':''}" title="${esc(p)}${filled.has(p)?' — filled':' — vacant'}"></span>`).join('')}</div>
+    </div>
+    ${ownExecs.length? `<div class="list" style="margin-top:6px">`+ownExecs.map(execItem).join('')+`</div>` : '<p class="muted small" style="margin:6px 0 0">No executives registered at this level yet.</p>'}
+  </div>
+
+  ${childLevel? `
+  <div class="card pad" style="margin-top:14px">
+    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">${childLabel}</h3><span class="badge k">${children.length}</span><span class="spacer"></span>
+      ${can('create')?`<button class="btn sm" data-act="newChild" data-level="${childLevel}" data-parent="${id}">＋ ${LVS[childLevel]}</button>`:''}
+    </div>
+    ${children.length? `<div class="list">`+children.sort((a,b)=>a.name.localeCompare(b.name)).map(ch=>`
+      <div class="item org" data-link="#/${childLevel}/${ch.id}">
+        <div class="icoo ${childLevel==='branch'?'b':'u'}">${childLevel==='branch'?'🏢':'📍'}</div>
+        <div class="body"><div class="nm">${esc(ch.name)}</div><div class="mt">${execCounts[ch.id]||0} executive(s)${ch.stationCode?' • PS '+esc(ch.stationCode):''}${ch.code?' • '+esc(ch.code):''}</div></div>
+        <div class="chev">›</div>
+      </div>`).join('')+`</div>` : `<p class="muted small">No ${childLabel.toLowerCase()} yet.</p>`}
+  </div>`:''}
+  `;
+}
+function execItem(e){
+  return `<div class="item" data-link="#/exec/${e.id}">
+    <div class="av">${e.photo?`<img src="${e.photo}" alt="">`:initials(e.fullName)}</div>
+    <div class="body"><div class="nm">${esc(e.fullName)}</div><div class="mt">${esc(e.position||'—')} • ${esc(e.phone||'')}</div></div>
+    <div class="chev">›</div>
+  </div>`;
+}
+async function buildCrumb(level,node){
+  const parts=[`<a href="#/wards">Registry</a>`];
+  if(level==='ward'){ parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
+  if(level==='branch'){ const w=await Store.get('ward:'+node.wardId); parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Ward')}</a>`,`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
+  if(level==='unit'){ const b=await Store.get('branch:'+node.branchId); const w=b?await Store.get('ward:'+b.wardId):null; if(w)parts.push(`<span class="sep">›</span><a href="#/ward/${w.id}">${esc(w.name)}</a>`); if(b)parts.push(`<span class="sep">›</span><a href="#/branch/${b.id}">${esc(b.name)}</a>`); parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
+  return `<div class="crumb">${parts.join('')}</div>`;
+}
+
+/* ============================================================
+   EXECUTIVE — form (create/edit)
+   ============================================================ */
+async function viewExecForm(execId, q){
+  const positions = await Data.positions();
+  let e = execId? await Store.get('exec:'+execId) : null;
+  const level = e? e.level : (q.level||'ward');
+  const parentId = e? e[level+'Id'] : (q.parent||'');
+  const slate = posForLevel(positions, level);
+
+  // parent selector data
+  let parentField='';
+  if(level==='ward'){
+    const wards = (await Data.wards()).sort((a,b)=>a.name.localeCompare(b.name));
+    parentField = selectField('wardId','Ward / Electoral Area',wards.map(w=>({v:w.id,t:w.name})),parentId,true);
+  } else if(level==='branch'){
+    const branches = (await Data.branches()).sort((a,b)=>a.name.localeCompare(b.name));
+    parentField = selectField('branchId','Branch',branches.map(b=>({v:b.id,t:b.name})),parentId,true);
+  } else {
+    const units = (await Data.units()).sort((a,b)=>a.name.localeCompare(b.name));
+    parentField = selectField('unitId','Unit / Polling station',units.map(u=>({v:u.id,t:u.name})),parentId,true);
+  }
+
+  return `
+  <div class="crumb"><a href="javascript:history.back()">‹ Back</a></div>
+  <div class="section-head"><h2>${e?'Edit':'Register'} ${LVS[level]} executive</h2></div>
+  <form id="execForm" class="card pad" data-level="${level}" data-id="${execId||''}">
+    <div class="field"><label>Passport photograph <span class="req">*</span></label>
+      <div class="photo-box">
+        <label class="photo-prev" id="photoPrev">${e&&e.photo?`<img src="${e.photo}">`:'<span>No photo<br>added</span>'}</label>
+        <div class="photo-actions">
+          <button type="button" class="btn sm" data-act="takePhoto">📷 Take photo</button>
+          <button type="button" class="btn sm" data-act="pickPhoto">🖼️ Choose from gallery</button>
+          <span class="tiny muted">Compressed automatically before saving.</span>
+        </div>
+      </div>
+      <input type="file" id="camIn" accept="image/*" capture="environment" class="hidden">
+      <input type="file" id="galIn" accept="image/*" class="hidden">
+      <input type="hidden" id="photoData" value="${e&&e.photo?e.photo:''}">
+      <div class="err hidden" id="photoErr">Photo is required.</div>
+    </div>
+
+    ${parentField}
+    ${textField('fullName','Full name',e&&e.fullName,true)}
+    ${selectField('position','Position / title',slate.map(p=>({v:p,t:p})),e&&e.position,true,true)}
+    <div class="grid2">
+      ${selectField('gender','Gender',[{v:'male',t:'Male'},{v:'female',t:'Female'},{v:'other',t:'Other'}],e&&e.gender,true)}
+      ${textField('phone','Phone number',e&&e.phone,true,'tel')}
+    </div>
+    <div class="grid2">
+      ${textField('email','Email',e&&e.email,false,'email')}
+      ${textField('dob','Date of birth',e&&e.dob,false,'date')}
+    </div>
+    ${textField('occupation','Occupation',e&&e.occupation,false)}
+    ${textareaField('address','Residential address',e&&e.address)}
+    ${textareaField('background','Political experience / background',e&&e.background)}
+
+    <div class="row" style="margin-top:6px">
+      <button type="button" class="btn primary" data-act="saveExec">${e?'Save changes':'Register executive'}</button>
+      <button type="button" class="btn ghost" data-act="cancel">Cancel</button>
+    </div>
+  </form>`;
+}
+function textField(id,label,val,req,type='text'){ return `<div class="field" data-f="${id}"><label>${label}${req?' <span class="req">*</span>':''}</label><input id="f_${id}" type="${type}" value="${val?esc(val):''}"><div class="err hidden">Required.</div></div>`; }
+function textareaField(id,label,val){ return `<div class="field" data-f="${id}"><label>${label}</label><textarea id="f_${id}">${val?esc(val):''}</textarea></div>`; }
+function selectField(id,label,opts,val,req,allowFree){ return `<div class="field" data-f="${id}"><label>${label}${req?' <span class="req">*</span>':''}</label><select id="f_${id}"><option value="">Select…</option>${opts.map(o=>`<option value="${esc(o.v)}" ${String(val)===String(o.v)?'selected':''}>${esc(o.t)}</option>`).join('')}${allowFree&&val&&!opts.some(o=>o.v===val)?`<option value="${esc(val)}" selected>${esc(val)}</option>`:''}</select><div class="err hidden">Required.</div></div>`; }
+
+function wireExecForm(){
+  const form=$('#execForm'); if(!form) return;
+  const cam=$('#camIn'), gal=$('#galIn');
+  const take=$('[data-act=takePhoto]'); if(take) take.onclick=()=>cam.click();
+  const pick=$('[data-act=pickPhoto]'); if(pick) pick.onclick=()=>gal.click();
+  const onPick = async (file)=>{ if(!file) return; try{ const data=await compressImage(file); $('#photoData').value=data; $('#photoPrev').innerHTML=`<img src="${data}">`; $('#photoErr').classList.add('hidden'); }catch{ toast('Could not read that image',true); } };
+  if(cam) cam.onchange=e=>onPick(e.target.files[0]);
+  if(gal) gal.onchange=e=>onPick(e.target.files[0]);
+  const cancel=$('[data-act=cancel]'); if(cancel) cancel.onclick=()=>history.back();
+  const save=$('[data-act=saveExec]'); if(save) save.onclick=saveExec;
+}
+function fieldVal(id){ const el=$('#f_'+id); return el?el.value.trim():''; }
+function setBad(f,bad,msg){ const wrap=document.querySelector(`[data-f="${f}"]`); if(!wrap) return; wrap.classList.toggle('bad',bad); const err=wrap.querySelector('.err'); if(err){ err.classList.toggle('hidden',!bad); if(msg) err.textContent=msg; } }
+async function saveExec(){
+  const form=$('#execForm'); const level=form.dataset.level; const id=form.dataset.id;
+  const parentKey = level+'Id';
+  const photo=$('#photoData').value;
+  const rec={
+    fullName:fieldVal('fullName'), position:fieldVal('position'), gender:fieldVal('gender'),
+    phone:fieldVal('phone'), email:fieldVal('email'), dob:fieldVal('dob'),
+    occupation:fieldVal('occupation'), address:fieldVal('address'), background:fieldVal('background'),
+    [parentKey]:fieldVal(parentKey), photo, level, status:'active'
+  };
+  // validation
+  let ok=true;
+  [['fullName'],['position'],['gender'],['phone'],[parentKey]].forEach(([f])=>{ const bad=!rec[f]; setBad(f,bad); if(bad)ok=false; });
+  if(rec.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rec.email)){ setBad('email',true,'Enter a valid email.'); ok=false; }
+  if(rec.phone && !/^[0-9+()\-\s]{7,15}$/.test(rec.phone)){ setBad('phone',true,'Enter a valid phone number.'); ok=false; }
+  if(rec.dob){ const a=age(rec.dob); if(a==null||a<18||a>120){ setBad('dob',true,'Must be a valid adult date of birth.'); ok=false; } }
+  if(!photo){ $('#photoErr').classList.remove('hidden'); ok=false; }
+  if(!ok){ toast('Please fix the highlighted fields',true); return; }
+
+  // duplicate detection (phone across active execs, excluding self)
+  const all = await Data.execs();
+  const dup = all.find(e=> e.id!==id && e.status==='active' && e.phone && e.phone.replace(/\s/g,'')===rec.phone.replace(/\s/g,''));
+  if(dup){ const go=await confirmModal('Possible duplicate','An executive ('+dup.fullName+') already uses this phone number. Register anyway?'); if(!go) return; }
+  // name + dob soft match
+  if(rec.dob){ const soft=all.find(e=>e.id!==id && e.dob===rec.dob && e.fullName.toLowerCase().trim()===rec.fullName.toLowerCase().trim()); if(soft){ const go=await confirmModal('Possible duplicate','Someone with the same name and date of birth is already registered. Continue?'); if(!go) return; } }
+
+  const eid = id || uid();
+  const existing = id? await Store.get('exec:'+id):null;
+  const final = Object.assign({}, existing||{}, rec, {id:eid, updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO(), createdBy:(existing&&existing.createdBy)||State.session.username});
+  await Store.set('exec:'+eid, final);
+  await audit(id?'UPDATE':'CREATE','executive',eid, (id?'Updated ':'Registered ')+rec.fullName+' ('+LVS[level]+')');
+  toast(id?'Changes saved':'Executive registered');
+  location.hash = '#/exec/'+eid; render();
+}
+
+/* ============================================================
+   EXECUTIVE — profile
+   ============================================================ */
+async function viewExecProfile(id){
+  const e=await Store.get('exec:'+id); if(!e) return emptyState('🚫','Not found','This executive may have been deleted.');
+  let parentName='—', parentLink='#/wards';
+  if(e.level==='ward'){ const w=await Store.get('ward:'+e.wardId); parentName=w?w.name:'—'; parentLink='#/ward/'+e.wardId; }
+  if(e.level==='branch'){ const b=await Store.get('branch:'+e.branchId); parentName=b?b.name:'—'; parentLink='#/branch/'+e.branchId; }
+  if(e.level==='unit'){ const u=await Store.get('unit:'+e.unitId); parentName=u?u.name:'—'; parentLink='#/unit/'+e.unitId; }
+  const a=age(e.dob);
+  return `
+  <div class="crumb"><a href="javascript:history.back()">‹ Back</a></div>
+  <div class="card pad">
+    <div class="profile-top">
+      ${e.photo?`<img class="profile-photo" src="${e.photo}" alt="${esc(e.fullName)}">`:`<div class="profile-photo" style="display:grid;place-items:center;color:var(--green);font-size:34px;font-weight:800">${initials(e.fullName)}</div>`}
+      <div style="min-width:0;flex:1">
+        <h2 style="font-size:20px">${esc(e.fullName)}</h2>
+        <div style="margin:6px 0"><span class="badge">${esc(e.position||'—')}</span> <span class="badge ${e.level==='ward'?'k':e.level==='branch'?'y':'r'}">${LVS[e.level]}</span></div>
+        <div class="small muted">${esc(parentName)}</div>
+      </div>
+    </div>
+    <dl class="kv" style="margin-top:16px">
+      <dt>Phone</dt><dd>${esc(e.phone||'—')}</dd>
+      <dt>Email</dt><dd>${esc(e.email||'—')}</dd>
+      <dt>Gender</dt><dd>${esc((e.gender||'—').replace(/^./,c=>c.toUpperCase()))}</dd>
+      <dt>Date of birth</dt><dd>${fmtDate(e.dob)}${a!=null?` (${a} yrs)`:''}</dd>
+      <dt>Occupation</dt><dd>${esc(e.occupation||'—')}</dd>
+      <dt>${LVS[e.level]}</dt><dd><a href="${parentLink}">${esc(parentName)}</a></dd>
+      <dt>Residence</dt><dd>${esc(e.address||'—')}</dd>
+      <dt>Background</dt><dd>${esc(e.background||'—')}</dd>
+      <dt>Registered</dt><dd>${fmtDate(e.createdAt)} by ${esc(e.createdBy||'—')}</dd>
+    </dl>
+    <div class="row" style="margin-top:16px">
+      ${can('edit')?`<button class="btn primary" data-link="#/exec/${e.id}/edit">Edit</button>`:''}
+      ${can('delete')?`<button class="btn danger" data-act="delExec" data-id="${e.id}" data-name="${esc(e.fullName)}">Delete</button>`:''}
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   SEARCH
+   ============================================================ */
+async function viewSearch(q){
+  const execs=await Data.execs();
+  State._searchCache=execs;
+  const wards=await Data.wards(), branches=await Data.branches(), units=await Data.units();
+  const wardName=id=>{const w=wards.find(x=>x.id===id);return w?w.name:'';};
+  const branchName=id=>{const b=branches.find(x=>x.id===id);return b?b.name:'';};
+  const unitName=id=>{const u=units.find(x=>x.id===id);return u?u.name:'';};
+  return `
+  <div class="section-head"><h2>Search</h2></div>
+  <div class="searchbar"><input id="sq" placeholder="Search by name, position, phone…" value="${esc(q.q||'')}"><button class="btn primary" data-act="runSearch">Search</button></div>
+  <div class="filters">
+    <select id="flevel"><option value="">All levels</option><option value="ward">Ward</option><option value="branch">Branch</option><option value="unit">Unit</option></select>
+    <select id="fgender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+    <select id="fsort"><option value="name">Sort: Name</option><option value="position">Sort: Position</option><option value="recent">Sort: Recent</option></select>
+  </div>
+  <div id="results"><p class="muted small">${execs.length} executive(s) in the registry. Type to filter.</p></div>`;
+}
+function wireSearch(){
+  const run=()=>{
+    const execs=State._searchCache||[];
+    const q=($('#sq').value||'').toLowerCase().trim();
+    const lv=$('#flevel').value, gn=$('#fgender').value, sort=$('#fsort').value;
+    let out=execs.filter(e=>{
+      if(lv&&e.level!==lv) return false;
+      if(gn&&e.gender!==gn) return false;
+      if(q){ const hay=(e.fullName+' '+e.position+' '+e.phone+' '+(e.email||'')).toLowerCase(); if(!hay.includes(q)) return false; }
+      return true;
+    });
+    if(sort==='name') out.sort((a,b)=>a.fullName.localeCompare(b.fullName));
+    else if(sort==='position') out.sort((a,b)=>(a.position||'').localeCompare(b.position||''));
+    else out.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+    const box=$('#results');
+    box.innerHTML = out.length? `<p class="muted small" style="margin-bottom:8px">${out.length} result(s)</p><div class="list">`+out.map(execItem).join('')+`</div>` : '<div class="empty"><div class="e-ico">🔍</div><h3>No matches</h3><p>Try a different name, position, or filter.</p></div>';
+    box.querySelectorAll('[data-link]').forEach(el=>el.onclick=()=>{location.hash=el.dataset.link;render();});
+  };
+  $('[data-act=runSearch]').onclick=run;
+  $('#sq').oninput=run; $('#sq').addEventListener('keydown',e=>{if(e.key==='Enter')run();});
+  $('#flevel').onchange=run; $('#fgender').onchange=run; $('#fsort').onchange=run;
+  if($('#sq').value) run();
+}
+
+/* ============================================================
+   REPORTS
+   ============================================================ */
+async function viewReports(){
+  const [wards,branches,units,execs,positions]=await Promise.all([Data.wards(),Data.branches(),Data.units(),Data.execs(),Data.positions()]);
+  const byLevel = l=>execs.filter(e=>e.level===l);
+  const genderOf = arr=>{const g={male:0,female:0,other:0};arr.forEach(e=>g[e.gender]=(g[e.gender]||0)+1);return g;};
+  const lvRow = (l)=>{ const arr=byLevel(l); const g=genderOf(arr); const t=arr.length||1;
+    return `<tr-row><div class="row small" style="padding:8px 0;border-bottom:1px solid var(--line)">
+      <span style="font-weight:700;width:64px">${LVS[l]}</span>
+      <span class="bar" style="flex:1"><i style="width:${g.male/t*100}%;background:var(--green)"></i><i style="width:${g.female/t*100}%;background:var(--gold)"></i><i style="width:${g.other/t*100}%;background:var(--red)"></i></span>
+      <span class="muted tiny" style="width:118px;text-align:right">M ${g.male} • F ${g.female} • O ${g.other}</span>
+    </div></tr-row>`; };
+
+  // incomplete coverage: units with no execs
+  const unitNoExec = units.filter(u=>!execs.some(e=>e.level==='unit'&&e.unitId===u.id));
+  const branchNoExec = branches.filter(b=>!execs.some(e=>e.level==='branch'&&e.branchId===b.id));
+
+  return `
+  <div class="section-head"><h2>Reports & analytics</h2><span class="spacer"></span><button class="btn sm" data-act="exportReport">⬇ Export CSV</button></div>
+
+  <div class="card pad">
+    <h3 style="font-size:15px;margin-bottom:6px">Gender distribution by level</h3>
+    ${['ward','branch','unit'].map(lvRow).join('').replace(/<\/?tr-row>/g,'')}
+    <div class="legend"><span><i class="dot" style="background:var(--green)"></i>Male</span><span><i class="dot" style="background:var(--gold)"></i>Female</span><span><i class="dot" style="background:var(--red)"></i>Other</span></div>
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:10px">Coverage gaps</h3>
+    <div class="row small" style="margin-bottom:8px"><span class="badge ${branchNoExec.length?'r':''}">${branchNoExec.length}</span><span>branch(es) with no executives</span></div>
+    ${branchNoExec.length?`<div class="muted tiny" style="margin-bottom:12px">${branchNoExec.slice(0,12).map(b=>esc(b.name)).join(', ')}${branchNoExec.length>12?'…':''}</div>`:''}
+    <div class="row small" style="margin-bottom:8px"><span class="badge ${unitNoExec.length?'r':''}">${unitNoExec.length}</span><span>unit(s) with no executives</span></div>
+    ${unitNoExec.length?`<div class="muted tiny">${unitNoExec.slice(0,12).map(u=>esc(u.name)).join(', ')}${unitNoExec.length>12?'…':''}</div>`:''}
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:10px">Totals</h3>
+    <div class="kv">
+      <dt>Total executives</dt><dd>${execs.length}</dd>
+      <dt>Ward level</dt><dd>${byLevel('ward').length}</dd>
+      <dt>Branch level</dt><dd>${byLevel('branch').length}</dd>
+      <dt>Unit level</dt><dd>${byLevel('unit').length}</dd>
+      <dt>Wards / Branches / Units</dt><dd>${wards.length} / ${branches.length} / ${units.length}</dd>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   DATA — import / export / backup / restore
+   ============================================================ */
+async function viewData(){
+  return `
+  <div class="section-head"><h2>Data tools</h2></div>
+  <div class="card pad">
+    <h3 style="font-size:15px;margin-bottom:4px">Export executives</h3>
+    <p class="muted small" style="margin:0 0 12px">Download all executive records as a spreadsheet (CSV). Photos are not included.</p>
+    <div class="row wrap"><button class="btn" data-act="exportCsv">⬇ Export CSV</button><button class="btn" data-act="downloadTemplate">📄 Download import template</button></div>
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:4px">Import executives</h3>
+    <p class="muted small" style="margin:0 0 12px">Upload a CSV matching the template. Wards, branches, and units are matched by name and created if missing. Rows are validated before import.</p>
+    <input type="file" id="csvIn" accept=".csv" class="hidden">
+    <button class="btn" data-act="pickCsv">⬆ Choose CSV file</button>
+    <div id="importReport" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:4px">Backup & restore</h3>
+    <p class="muted small" style="margin:0 0 12px">A full backup includes every record and photo as a single file you can store safely or move to another device.</p>
+    <div class="row wrap">
+      <button class="btn" data-act="backup">💾 Download full backup</button>
+      ${State.session.role==='constituency_admin'?`<input type="file" id="bkIn" accept=".json" class="hidden"><button class="btn danger" data-act="restore">♻ Restore from backup</button>`:''}
+    </div>
+  </div>`;
+}
+const CSV_COLS = ['level','ward','branch','unit','fullName','position','gender','phone','email','dob','occupation','address','background'];
+function csvEscape(v){ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function toCSV(rows){ return [CSV_COLS.join(',')].concat(rows.map(r=>CSV_COLS.map(c=>csvEscape(r[c])).join(','))).join('\n'); }
+function parseCSV(text){
+  const rows=[]; let i=0, field='', row=[], q=false;
+  while(i<text.length){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; } else field+=c; }
+    else { if(c==='"') q=true; else if(c===','){ row.push(field); field=''; } else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; if(field!==''||row.length){ row.push(field); rows.push(row); row=[]; field=''; } } else field+=c; }
+    i++;
+  }
+  if(field!==''||row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function download(name, content, type='text/plain'){ const blob=new Blob([content],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); }
+
+async function exportExecsCSV(){
+  const [execs,wards,branches,units]=await Promise.all([Data.execs(),Data.wards(),Data.branches(),Data.units()]);
+  const wn=id=>{const x=wards.find(w=>w.id===id);return x?x.name:'';};
+  const bn=id=>{const x=branches.find(b=>b.id===id);return x?x.name:'';};
+  const un=id=>{const x=units.find(u=>u.id===id);return x?x.name:'';};
+  const rows=execs.map(e=>({level:e.level, ward:e.level==='ward'?wn(e.wardId):(e.level==='branch'?wn((branches.find(b=>b.id===e.branchId)||{}).wardId):''), branch:e.level==='branch'?bn(e.branchId):(e.level==='unit'?bn((units.find(u=>u.id===e.unitId)||{}).branchId):''), unit:e.level==='unit'?un(e.unitId):'', fullName:e.fullName, position:e.position, gender:e.gender, phone:e.phone, email:e.email, dob:e.dob, occupation:e.occupation, address:e.address, background:e.background}));
+  download(`ndc_keten_executives_${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows),'text/csv');
+  await audit('EXPORT','executive','','Exported '+rows.length+' executives to CSV');
+  toast('Exported '+rows.length+' record(s)');
+}
+async function importCSV(file){
+  const text=await file.text(); const rows=parseCSV(text); if(rows.length<2){ toast('File looks empty',true); return; }
+  const header=rows[0].map(h=>h.trim()); const idx={}; CSV_COLS.forEach(c=>idx[c]=header.indexOf(c));
+  if(idx.fullName<0||idx.level<0){ toast('Missing required columns (level, fullName)',true); return; }
+  let wards=await Data.wards(), branches=await Data.branches(), units=await Data.units();
+  const findOrCreate=async (type,name,parentField,parentId)=>{
+    name=(name||'').trim(); if(!name) return null;
+    let coll = type==='ward'?wards:type==='branch'?branches:units;
+    let found = coll.find(x=>x.name.toLowerCase()===name.toLowerCase() && (!parentField || x[parentField]===parentId));
+    if(found) return found;
+    const rec={id:uid(),name,type,createdAt:nowISO(),updatedAt:nowISO()}; if(parentField) rec[parentField]=parentId;
+    await Store.set(type+':'+rec.id,rec); coll.push(rec); return rec;
+  };
+  let ok=0, fail=0, errs=[];
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r]; if(!row.length||!(row[idx.fullName]||'').trim()) continue;
+    const g=(k)=>(idx[k]>=0?(row[idx[k]]||'').trim():'');
+    const level=g('level').toLowerCase();
+    if(!['ward','branch','unit'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level`); continue; }
+    if(!g('fullName')||!g('position')||!g('gender')||!g('phone')){ fail++; errs.push(`Row ${r+1}: missing required field`); continue; }
+    let wardId=null,branchId=null,unitId=null;
+    const w=await findOrCreate('ward',g('ward'),null,null); if(w) wardId=w.id;
+    if(level!=='ward'){ const b=await findOrCreate('branch',g('branch'),'wardId',wardId); if(b) branchId=b.id; }
+    if(level==='unit'){ const u=await findOrCreate('unit',g('unit'),'branchId',branchId); if(u) unitId=u.id; }
+    if(level==='ward'&&!wardId){ fail++; errs.push(`Row ${r+1}: ward name required`); continue; }
+    if(level==='branch'&&!branchId){ fail++; errs.push(`Row ${r+1}: branch name required`); continue; }
+    if(level==='unit'&&!unitId){ fail++; errs.push(`Row ${r+1}: unit name required`); continue; }
+    const id=uid();
+    const rec={id, level, fullName:g('fullName'), position:g('position'), gender:(g('gender').toLowerCase()), phone:g('phone'), email:g('email'), dob:g('dob'), occupation:g('occupation'), address:g('address'), background:g('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
+    rec[level+'Id'] = level==='ward'?wardId:level==='branch'?branchId:unitId;
+    await Store.set('exec:'+id,rec); ok++;
+  }
+  await audit('IMPORT','executive','',`Imported ${ok} executives (${fail} failed)`);
+  $('#importReport').innerHTML = `<div class="card pad" style="background:var(--green-soft);border:0"><b>${ok} imported</b>${fail?` • <span style="color:var(--red)">${fail} skipped</span>`:''}${errs.length?`<div class="tiny muted" style="margin-top:6px">${errs.slice(0,8).map(esc).join('<br>')}</div>`:''}</div>`;
+  toast(`Imported ${ok}, skipped ${fail}`, fail>0);
+}
+async function fullBackup(){
+  const keys=await Store.keys(''); const dump={};
+  for(const k of keys){ dump[k]=await Store.get(k); }
+  download(`ndc_keten_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify({app:'ndc-keten',version:'1.0',at:nowISO(),data:dump},null,0),'application/json');
+  await audit('BACKUP','system','','Full backup downloaded');
+  toast('Backup downloaded');
+}
+async function restoreBackup(file){
+  const go=await confirmModal('Restore backup?','This replaces ALL current data on this device with the contents of the backup file. This cannot be undone.');
+  if(!go) return;
+  try{ const obj=JSON.parse(await file.text()); const data=obj.data||obj; let n=0;
+    for(const k of Object.keys(data)){ await Store.set(k,data[k]); n++; }
+    await audit('RESTORE','system','','Restored '+n+' records from backup');
+    toast('Restored '+n+' record(s)'); const s=await Store.get('settings'); if(s)State.settings=s; render();
+  }catch{ toast('That file could not be read',true); }
+}
+function wireData(){
+  $('[data-act=exportCsv]').onclick=exportExecsCSV;
+  $('[data-act=downloadTemplate]').onclick=()=>{ download('ndc_import_template.csv', CSV_COLS.join(',')+'\nward,Esikado Central,,,Ama Mensah,Chairman,female,0244000000,,1985-03-12,Trader,Esikado,5 years organizing\n','text/csv'); };
+  const ci=$('#csvIn'); $('[data-act=pickCsv]').onclick=()=>ci.click(); ci.onchange=e=>{ if(e.target.files[0]) importCSV(e.target.files[0]); };
+  $('[data-act=backup]').onclick=fullBackup;
+  const bk=$('#bkIn'); if(bk){ $('[data-act=restore]').onclick=()=>bk.click(); bk.onchange=e=>{ if(e.target.files[0]) restoreBackup(e.target.files[0]); }; }
+}
+
+/* ============================================================
+   ADMIN — users & positions & settings
+   ============================================================ */
+async function viewAdmin(){
+  const users=await Data.users(); const wards=await Data.wards(); const branches=await Data.branches();
+  return `
+  <div class="section-head"><h2>Administration</h2></div>
+
+  <div class="card pad">
+    <h3 style="font-size:15px;margin-bottom:4px">Constituency</h3>
+    <div class="grid2" style="margin-top:8px">
+      <div class="field" style="margin:0"><label>Constituency name</label><input id="setCon" value="${esc(State.settings.constituency)}"></div>
+      <div class="field" style="margin:0"><label>Region</label><input id="setReg" value="${esc(State.settings.region||'')}"></div>
+    </div>
+    <button class="btn sm primary" data-act="saveSettings" style="margin-top:10px">Save</button>
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span><button class="btn sm primary" data-act="newUser">＋ User</button></div>
+    <div class="list">${users.map(u=>`
+      <div class="item"><div class="av">${initials(u.fullName||u.username)}</div>
+        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${u.role==='constituency_admin'?'':'k'}">${esc(u.role.replace(/_/g,' '))}</span></div><div class="mt">@${esc(u.username)}</div></div>
+        ${u.username!=='admin'?`<button class="btn sm danger" data-act="delUser" data-id="${esc(u.username)}">✕</button>`:'<span class="tiny muted">primary</span>'}
+      </div>`).join('')}</div>
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:6px">Security note</h3>
+    <p class="muted small" style="margin:0">User accounts here are stored on this device only. For real multi-device authentication, scoped permissions, and audit integrity, connect the Supabase backend described in the deployment guide. Change the default admin password now.</p>
+    <div class="field" style="margin-top:10px"><label>Reset admin password</label><input id="newPw" type="password" placeholder="New password"></div>
+    <button class="btn sm" data-act="resetPw">Update password</button>
+  </div>`;
+}
+function wireAdmin(){
+  $('[data-act=saveSettings]').onclick=async ()=>{ State.settings={constituency:$('#setCon').value.trim()||'Keten Esikado',region:$('#setReg').value.trim()}; await Store.set('settings',State.settings); toast('Saved'); render(); };
+  $('[data-act=newUser]').onclick=newUserFlow;
+  document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{ const go=await confirmModal('Remove user?','This removes login access for @'+b.dataset.id+'.'); if(go){ await Store.del('user:'+b.dataset.id); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); } });
+  $('[data-act=resetPw]').onclick=async()=>{ const pw=$('#newPw').value; if(pw.length<4){ toast('Use at least 4 characters',true); return; } const u=await Store.get('user:admin'); u.password=pw; await Store.set('user:admin',u); if(State.session.username==='admin')State.session.password=pw; toast('Password updated'); };
+}
+async function newUserFlow(){
+  const body=`
+    <div class="field"><label>Full name</label><input id="nuName"></div>
+    <div class="field"><label>Username</label><input id="nuUser"></div>
+    <div class="field"><label>Password</label><input id="nuPw" type="password"></div>
+    <div class="field"><label>Role</label><select id="nuRole">
+      <option value="constituency_admin">Constituency Admin</option>
+      <option value="ward_admin">Ward Admin</option>
+      <option value="branch_admin">Branch Admin</option>
+      <option value="viewer">Viewer</option>
+    </select></div>`;
+  const r=await modalForm('Add user',body);
+  if(!r.ok) return;
+  const name=$('#nuName').value.trim(), username=$('#nuUser').value.trim().toLowerCase(), pw=$('#nuPw').value, role=$('#nuRole').value;
+  if(!username||!pw){ toast('Username and password are required',true); return; }
+  if(await Store.get('user:'+username)){ toast('That username is taken',true); return; }
+  r.el.remove();
+  await Store.set('user:'+username,{id:username,username,password:pw,fullName:name||username,role});
+  await audit('CREATE','user',username,'Added user @'+username+' ('+role+')');
+  toast('User added'); render();
+}
+
+/* ============================================================
+   ACTIVITY / AUDIT
+   ============================================================ */
+async function viewAudit(){
+  const a=await Data.audits();
+  return `
+  <div class="section-head"><h2>Activity log</h2><span class="sub">Audit trail</span></div>
+  ${a.length? `<div class="list">`+a.slice(0,200).map(x=>`
+    <div class="item"><div class="av" style="background:${x.action==='DELETE'?'var(--red-soft)':'var(--green-soft)'};color:${x.action==='DELETE'?'var(--red)':'var(--green)'};font-size:13px">${esc(x.action.slice(0,3))}</div>
+      <div class="body"><div class="nm" style="font-size:14px">${esc(x.detail||x.entityType)}</div><div class="mt">@${esc(x.user)} • ${esc(x.action)} • ${esc(x.entityType)}</div></div>
+      <div class="tiny muted" style="text-align:right;white-space:nowrap">${new Date(x.ts).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+    </div>`).join('')+`</div>` : emptyState('📋','No activity yet','Actions you take will be recorded here.')}`;
+}
+
+/* ============================================================
+   Shared UI helpers (empty / modal)
+   ============================================================ */
+function emptyState(icon,title,msg,actions){ return `<div class="empty"><div class="e-ico">${icon}</div><h3>${esc(title)}</h3><p>${esc(msg)}</p>${actions?`<div style="margin-top:14px">${actions}</div>`:''}</div>`; }
+function confirmModal(title,msg){
+  return new Promise(res=>{
+    const bg=document.createElement('div'); bg.className='modal-bg';
+    bg.innerHTML=`<div class="modal"><h3>${esc(title)}</h3><p>${esc(msg)}</p><div class="acts"><button class="btn" data-x="0">Cancel</button><button class="btn danger" data-x="1">Confirm</button></div></div>`;
+    document.body.appendChild(bg);
+    bg.addEventListener('click',e=>{ if(e.target===bg){ bg.remove(); res(false);} const x=e.target.dataset.x; if(x!==undefined){ bg.remove(); res(x==='1'); } });
+  });
+}
+function modalForm(title,bodyHtml){
+  return new Promise(res=>{
+    const bg=document.createElement('div'); bg.className='modal-bg';
+    bg.innerHTML=`<div class="modal"><h3>${esc(title)}</h3>${bodyHtml}<div class="acts"><button class="btn" data-x="0">Cancel</button><button class="btn primary" data-x="1">Save</button></div></div>`;
+    document.body.appendChild(bg);
+    bg._resolve=res; bg._cleanup=()=>bg.remove();
+    bg.addEventListener('click',e=>{ const x=e.target.dataset.x; if(e.target===bg){bg.remove();res({ok:false});} else if(x!==undefined){ if(x==='0'){bg.remove();res({ok:false});} else { res({ok:true,el:bg}); } } });
+  });
+}
+
+/* ============================================================
+   Org create / edit flows (modal)
+   ============================================================ */
+async function orgFormModal(type, existing, parentId){
+  const wards = type!=='ward'? (await Data.wards()).sort((a,b)=>a.name.localeCompare(b.name)) : [];
+  const branches = type==='unit'? (await Data.branches()).sort((a,b)=>a.name.localeCompare(b.name)) : [];
+  let extra='';
+  if(type==='branch'){ extra=`<div class="field"><label>Parent ward <span class="req">*</span></label><select id="of_parent">${wards.map(w=>`<option value="${w.id}" ${parentId===w.id||(existing&&existing.wardId===w.id)?'selected':''}>${esc(w.name)}</option>`).join('')}</select></div>`; }
+  if(type==='unit'){ extra=`<div class="field"><label>Parent branch <span class="req">*</span></label><select id="of_parent">${branches.map(b=>`<option value="${b.id}" ${parentId===b.id||(existing&&existing.branchId===b.id)?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`; }
+  const codeLabel = type==='unit'?'Polling station code':'Code (optional)';
+  const codeId = type==='unit'?'of_station':'of_code';
+  const body=`
+    <div class="field"><label>${LV[type]} name <span class="req">*</span></label><input id="of_name" value="${existing?esc(existing.name):''}"></div>
+    ${extra}
+    <div class="field"><label>${codeLabel}</label><input id="${codeId}" value="${existing?esc(type==='unit'?(existing.stationCode||''):(existing.code||'')):''}"></div>`;
+  const r=await modalForm((existing?'Edit ':'Add ')+LVS[type], body);
+  if(!r.ok) return;
+  const name=$('#of_name').value.trim(); if(!name){ toast('Name is required',true); return; }
+  const id = existing? existing.id : uid();
+  const rec = Object.assign({}, existing||{}, {id, type, name, updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO()});
+  if(type==='branch'){ rec.wardId=$('#of_parent').value; rec.code=$('#of_code').value.trim(); }
+  if(type==='unit'){ rec.branchId=$('#of_parent').value; rec.stationCode=$('#of_station').value.trim(); }
+  if(type==='ward'){ rec.code=$('#of_code').value.trim(); }
+  r.el.remove();
+  await Store.set(type+':'+id, rec);
+  await audit(existing?'UPDATE':'CREATE',type,id,(existing?'Updated ':'Created ')+LVS[type]+' '+name);
+  toast(existing?'Saved':LVS[type]+' added');
+  if(!existing && type!=='ward'){ render(); } else { location.hash = '#/'+type+'/'+id; render(); }
+}
+
+/* ============================================================
+   GLOBAL event wiring
+   ============================================================ */
+function wireGlobal(){
+  document.querySelectorAll('[data-link]').forEach(el=>{ el.style.cursor='pointer'; el.onclick=(e)=>{ if(e.target.closest('[data-act]'))return; location.hash=el.dataset.link; render(); }; });
+  document.querySelectorAll('[data-act]').forEach(el=> el.addEventListener('click', onAction));
+}
+async function onAction(e){
+  const el=e.currentTarget; const act=el.dataset.act; e.stopPropagation();
+  if(act==='logout') return logout();
+  if(act==='newWard') return orgFormModal('ward',null,null);
+  if(act==='newChild') return orgFormModal(el.dataset.level,null,el.dataset.parent);
+  if(act==='editOrg'){ const n=await Store.get(el.dataset.level+':'+el.dataset.id); return orgFormModal(el.dataset.level,n,null); }
+  if(act==='delOrg'){ const go=await confirmModal('Delete '+LVS[el.dataset.level]+'?','This also deletes everything beneath it (branches, units, and their executives).'); if(go){ await cascadeDelete(el.dataset.level,el.dataset.id); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
+  if(act==='delExec'){ const go=await confirmModal('Delete executive?','This permanently removes '+el.dataset.name+'.'); if(go){ await Store.del('exec:'+el.dataset.id); await audit('DELETE','executive',el.dataset.id,'Deleted '+el.dataset.name); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
+  if(act==='exportReport') return exportExecsCSV();
+}
+async function cascadeDelete(type,id){
+  if(type==='ward'){
+    const branches=(await Data.branches()).filter(b=>b.wardId===id);
+    for(const b of branches) await cascadeDelete('branch',b.id);
+    (await Data.execs()).filter(e=>e.level==='ward'&&e.wardId===id).forEach(e=>Store.del('exec:'+e.id));
+    await Store.del('ward:'+id);
+  } else if(type==='branch'){
+    const units=(await Data.units()).filter(u=>u.branchId===id);
+    for(const u of units) await cascadeDelete('unit',u.id);
+    (await Data.execs()).filter(e=>e.level==='branch'&&e.branchId===id).forEach(e=>Store.del('exec:'+e.id));
+    await Store.del('branch:'+id);
+  } else {
+    (await Data.execs()).filter(e=>e.level==='unit'&&e.unitId===id).forEach(e=>Store.del('exec:'+e.id));
+    await Store.del('unit:'+id);
+  }
+  await audit('DELETE',type,id,'Deleted '+LVS[type]+' and its records');
+}
+
+/* ---------------- Sync indicator ---------------- */
+function updateSync(){
+  const dot=$('#syncDot'), txt=$('#syncTxt'); if(!dot) return;
+  const online = navigator.onLine;
+  dot.classList.toggle('online', online);
+  txt.textContent = (Store.backend==='window.storage'?'Saved':'Offline-ready');
+}
+window.addEventListener('online',updateSync); window.addEventListener('offline',updateSync);
+
+/* ---------------- Boot ---------------- */
+const ensureReady = (async ()=>{ await bootstrap(); })();
+window.addEventListener('hashchange', render);
+ensureReady.then(render);
+
+/* ---------------- Service worker ---------------- */
+if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+</script>
+</body>
+</html>
