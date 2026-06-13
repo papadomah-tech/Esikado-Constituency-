@@ -1161,7 +1161,23 @@ window.addEventListener('hashchange', render);
 ensureReady.then(render);
 
 /* ---------------- Service worker ---------------- */
-if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+if('serviceWorker' in navigator){
+  window.addEventListener('load', async ()=>{
+    try{
+      const reg = await navigator.serviceWorker.register('sw.js');
+      reg.update();
+      let updating=false;
+      reg.addEventListener('updatefound', ()=>{
+        const nw = reg.installing; if(!nw) return;
+        nw.addEventListener('statechange', ()=>{
+          // A new version finished installing while an old one controls the page → it's an update.
+          if(nw.state==='installed' && navigator.serviceWorker.controller){ updating=true; nw.postMessage('skipWaiting'); }
+        });
+      });
+      navigator.serviceWorker.addEventListener('controllerchange', ()=>{ if(updating){ updating=false; location.reload(); } });
+    }catch(e){}
+  });
+}
 </script>
 </body>
 </html>
