@@ -275,8 +275,8 @@ const initials = (n)=> (n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join
 const fmtDate = (iso)=>{ if(!iso) return '—'; const d=new Date(iso); return isNaN(d)? '—' : d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); };
 const age = (dob)=>{ if(!dob) return null; const d=new Date(dob); if(isNaN(d)) return null; const t=new Date(); let a=t.getFullYear()-d.getFullYear(); const m=t.getMonth()-d.getMonth(); if(m<0||(m===0&&t.getDate()<d.getDate())) a--; return a; };
 function toast(msg,err){ const t=$('#toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); clearTimeout(t._t); t._t=setTimeout(()=>t.className='toast',2600); }
-const LV = {ward:'Ward / Electoral Area', branch:'Branch', unit:'Unit / Polling Station'};
-const LVS = {ward:'Ward', branch:'Branch', unit:'Unit'};
+const LV = {region:'Region', constituency:'Constituency', ward:'Ward / Electoral Area', branch:'Branch', unit:'Unit / Polling Station'};
+const LVS = {region:'Region', constituency:'Constituency', ward:'Ward', branch:'Branch', unit:'Unit'};
 
 /* ---------------- Audit ---------------- */
 async function audit(action, entityType, entityId, detail){
@@ -287,64 +287,122 @@ async function audit(action, entityType, entityId, detail){
 
 /* ---------------- Default positions slate ---------------- */
 const DEFAULT_POSITIONS = [
-  {title:'Chairman', levels:['ward','branch']},
+  {title:'Chairman', levels:['region','constituency','ward','branch']},
+  {title:'First Vice Chairman', levels:['region','constituency']},
+  {title:'Second Vice Chairman', levels:['region','constituency']},
   {title:'Vice Chairman', levels:['ward','branch']},
-  {title:'Secretary', levels:['ward','branch','unit']},
-  {title:'Deputy Secretary', levels:['ward','branch']},
-  {title:'Organizer', levels:['ward','branch','unit']},
-  {title:'Deputy Organizer', levels:['ward','branch']},
-  {title:'Treasurer', levels:['ward','branch']},
-  {title:"Women's Organizer", levels:['ward','branch','unit']},
-  {title:'Youth Organizer', levels:['ward','branch','unit']},
-  {title:'Communication Officer', levels:['ward','branch']},
-  {title:'Polling Station Executive', levels:['unit']},
+  {title:'Secretary', levels:['region','constituency','ward','branch','unit']},
+  {title:'Deputy Secretary', levels:['region','constituency','ward','branch']},
+  {title:'Treasurer', levels:['region','constituency','ward','branch']},
+  {title:'Deputy Treasurer', levels:['region','constituency']},
+  {title:'Organizer', levels:['region','constituency','ward','branch','unit']},
+  {title:'Deputy Organizer', levels:['region','constituency','ward','branch']},
+  {title:"Women's Organizer", levels:['region','constituency','ward','branch','unit']},
+  {title:"Deputy Women's Organizer", levels:['region','constituency']},
+  {title:'Youth Organizer', levels:['region','constituency','ward','branch','unit']},
+  {title:'Deputy Youth Organizer', levels:['region','constituency']},
+  {title:'Communications Officer', levels:['region','constituency','ward','branch']},
+  {title:'Nasara Coordinator', levels:['region','constituency','ward','branch']},
   {title:'Electoral Area Coordinator', levels:['ward']},
+  {title:'Polling Station Executive', levels:['unit']},
+];
+
+/* ---------------- Constituencies (Western Region, fixed set of 17) ---------------- */
+const REGION_NAME = 'Western Region';
+const REGION_CODE = 'WR';
+const CONSTITUENCIES = [
+  {code:'AHW', name:'Ahanta West'},
+  {code:'AMC', name:'Amenfi Central'},
+  {code:'AME', name:'Amenfi East'},
+  {code:'AMW', name:'Amenfi West'},
+  {code:'EFF', name:'Effia'},
+  {code:'ELL', name:'Ellembelle'},
+  {code:'ESK', name:'Essikado-Ketan'},
+  {code:'EVA', name:'Evalue-Ajomoro (Evalue Gwira)'},
+  {code:'JOM', name:'Jomoro'},
+  {code:'KWE', name:'Kwesimintsim'},
+  {code:'MPO', name:'Mpohor'},
+  {code:'PHV', name:'Prestea-Huni Valley'},
+  {code:'SEK', name:'Sekondi'},
+  {code:'SHA', name:'Shama'},
+  {code:'TAK', name:'Takoradi'},
+  {code:'TKN', name:'Tarkwa-Nsuaem'},
+  {code:'WSE', name:'Wassa East'},
 ];
 
 /* ---------------- App state ---------------- */
-const State = { session:null, settings:{constituency:'Keten Esikado', region:'Western'} };
+const State = { session:null, settings:{region:REGION_NAME, regionCode:REGION_CODE}, currentCon:null };
 
 /* ---------------- Bootstrap / seed ---------------- */
 async function bootstrap(){
   const init = await Store.get('meta:init');
   if(!init){
-    // default admin (LOCAL ONLY — change on first login; real auth via Supabase)
-    await Store.set('user:admin', {id:'admin', username:'admin', password:'ndc2024', fullName:'Constituency Admin', role:'constituency_admin'});
+    // default REGIONAL admin (LOCAL ONLY — change on first login; real auth via Supabase)
+    await Store.set('user:admin', {id:'admin', username:'admin', password:'ndc2024', fullName:'Regional Administrator', role:'regional_admin', scopeConstituencyId:null});
     await Store.set('positions', DEFAULT_POSITIONS);
     await Store.set('settings', State.settings);
-    await Store.set('meta:regSeq', 0);
-    await Store.set('meta:init', {at:nowISO(), version:'1.0'});
+    await Store.set('meta:init', {at:nowISO(), version:'2.0'});
   }
-  const s = await Store.get('settings'); if(s) State.settings=s;
-  await migrateRegNos();
+  // seed/refresh the fixed constituency set
+  for(const c of CONSTITUENCIES){
+    const ex = await Store.get('con:'+c.code);
+    if(!ex) await Store.set('con:'+c.code, {id:c.code, code:c.code, name:c.name, region:REGION_NAME, type:'constituency'});
+  }
+  const s = await Store.get('settings'); if(s) State.settings=Object.assign({region:REGION_NAME,regionCode:REGION_CODE}, s);
+  await migrateToRegional();
   const sess = await Store.get('meta:session');
   if(sess){ const u = await Store.get('user:'+sess); if(u) State.session=u; }
 }
 
-/* ---------------- Registration numbers (sequential, immutable) ---------------- */
-const REG_PREFIX = 'KE';
-function formatReg(n){ return REG_PREFIX+'-'+String(n).padStart(4,'0'); }
+/* ---------------- Registration numbers (per-constituency, sequential, immutable) ---------------- */
+function formatReg(prefix, n){ return prefix+'-'+String(n).padStart(4,'0'); }
 let _seqChain = Promise.resolve();
-function nextRegNo(){
+function nextRegNo(prefix){
   const p = _seqChain.then(async ()=>{
-    let seq = (await Store.get('meta:regSeq'))||0; seq++;
-    await Store.set('meta:regSeq', seq);
-    return formatReg(seq);
+    const key='seq:'+prefix;
+    let seq = (await Store.get(key))||0; seq++;
+    await Store.set(key, seq);
+    return formatReg(prefix, seq);
   });
   _seqChain = p.catch(()=>{});
   return p;
 }
-// Backfill any pre-existing executives that have no registration number (runs once).
-async function migrateRegNos(){
-  if(await Store.get('meta:regMigrated')) return;
+// Resolve which numbering prefix an executive belongs to (constituency code, or WR for regional).
+async function prefixForExec(rec){
+  if(rec.level==='region') return REGION_CODE;
+  if(rec.level==='constituency') return (await Store.get('con:'+rec.constituencyId)||{}).code || rec.constituencyId;
+  const conId = await constituencyIdOf(rec);
+  return (await Store.get('con:'+conId)||{}).code || conId || REGION_CODE;
+}
+// One-time migration from the single-constituency (v1) layout to the regional layout.
+async function migrateToRegional(){
+  if(await Store.get('meta:regionalMigrated')) return;
+  // Legacy (v1) admin accounts had role constituency_admin with no constituency scope —
+  // such accounts previously had full visibility, so promote them to regional_admin.
+  const users = await Store.getAll('user:');
+  for(const u of users){
+    if(u.role==='constituency_admin' && !u.scopeConstituencyId){ u.role='regional_admin'; await Store.set('user:'+u.username, u); }
+  }
+  // Discard legacy v1 settings (free-text constituency/region fields) in favour of the fixed region.
+  await Store.set('settings', {region:REGION_NAME, regionCode:REGION_CODE});
+  State.settings = {region:REGION_NAME, regionCode:REGION_CODE};
+  // Attach any pre-existing wards (and therefore their branches/units/execs) to Essikado-Ketan.
+  const wards = await Store.getAll('ward:');
+  for(const w of wards){ if(!w.constituencyId){ w.constituencyId='ESK'; await Store.set('ward:'+w.id, w); } }
+  // Backfill registration numbers for any execs missing one, per constituency prefix.
   const execs = await Store.getAll('exec:');
-  let seq = (await Store.get('meta:regSeq'))||0;
-  // never collide with numbers already present
-  execs.forEach(e=>{ if(e.regNo){ const m=String(e.regNo).match(/(\d+)\s*$/); if(m) seq=Math.max(seq, parseInt(m[1],10)); } });
+  const counters = {};
+  // seed counters from existing numbers so we never collide
+  execs.forEach(e=>{ if(e.regNo){ const m=String(e.regNo).match(/^([A-Za-z]+)-?(\d+)/); if(m){ counters[m[1]]=Math.max(counters[m[1]]||0, parseInt(m[2],10)); } } });
   const missing = execs.filter(e=>!e.regNo).sort((a,b)=> String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
-  for(const e of missing){ seq++; e.regNo = formatReg(seq); await Store.set('exec:'+e.id, e); }
-  await Store.set('meta:regSeq', seq);
-  await Store.set('meta:regMigrated', {at:nowISO()});
+  for(const e of missing){
+    const prefix = await prefixForExec(e);
+    counters[prefix] = (counters[prefix]||0)+1;
+    e.regNo = formatReg(prefix, counters[prefix]);
+    await Store.set('exec:'+e.id, e);
+  }
+  for(const p of Object.keys(counters)){ const cur=(await Store.get('seq:'+p))||0; if(counters[p]>cur) await Store.set('seq:'+p, counters[p]); }
+  await Store.set('meta:regionalMigrated', {at:nowISO()});
 }
 
 /* ---------------- Auth ---------------- */
@@ -359,14 +417,22 @@ async function login(username, password){
 async function logout(){ await audit('LOGOUT','user',State.session?State.session.username:'',''); State.session=null; await Store.del('meta:session'); location.hash='#/login'; render(); }
 function can(action){
   const r = State.session && State.session.role;
-  if(r==='constituency_admin') return true;
+  if(r==='regional_admin' || r==='constituency_admin') return true;
   if(r==='viewer') return action==='view'||action==='export';
-  // ward_admin / branch_admin: write within scope (scope checks applied at data level in this v1)
+  // ward_admin / branch_admin
   return ['view','create','edit','delete','export','import'].includes(action);
 }
+function isRegional(){ return State.session && State.session.role==='regional_admin'; }
+// The constituency a non-regional user is locked to (null for regional admins).
+function userConId(){ return isRegional()? null : (State.session && State.session.scopeConstituencyId) || null; }
+// Whether the current user may access a given constituency id.
+function inScope(conId){ const s=userConId(); return s===null ? true : conId===s; }
+// The constituency context currently in view (regional admins can switch; others are fixed).
+function activeConId(){ return isRegional()? State.currentCon : userConId(); }
 
 /* ---------------- Data accessors ---------------- */
 const Data = {
+  constituencies: ()=> Store.getAll('con:'),
   wards: ()=> Store.getAll('ward:'),
   branches: ()=> Store.getAll('branch:'),
   units: ()=> Store.getAll('unit:'),
@@ -377,6 +443,18 @@ const Data = {
   get: (k)=> Store.get(k),
 };
 function posForLevel(positions, level){ return positions.filter(p=>p.levels.includes(level)).map(p=>p.title); }
+
+// Resolve the constituency id for any executive or org node (null for region-level).
+async function constituencyIdOf(rec){
+  if(!rec) return null;
+  if(rec.level==='region') return null;
+  if(rec.level==='constituency' || rec.type==='constituency') return rec.constituencyId || rec.id;
+  if(rec.level==='ward' || rec.type==='ward'){ const w = rec.constituencyId!==undefined ? rec : await Store.get('ward:'+(rec.wardId||rec.id)); return w?w.constituencyId:null; }
+  if(rec.level==='branch' || rec.type==='branch'){ const b = rec.wardId!==undefined && rec.type==='branch' ? rec : await Store.get('branch:'+(rec.branchId||rec.id)); const w=b?await Store.get('ward:'+b.wardId):null; return w?w.constituencyId:null; }
+  // unit
+  const u = (rec.branchId!==undefined && rec.type==='unit') ? rec : await Store.get('unit:'+(rec.unitId||rec.id));
+  const b = u?await Store.get('branch:'+u.branchId):null; const w=b?await Store.get('ward:'+b.wardId):null; return w?w.constituencyId:null;
+}
 
 /* ---------------- Photo capture + compression ---------------- */
 function compressImage(file, maxDim=620, quality=0.72){
@@ -422,7 +500,10 @@ async function _render(){
   const c = $('#content');
   try{
     if(route==='dashboard'){ c.innerHTML = await viewDashboard(); }
-    else if(route==='wards'){ c.innerHTML = await viewOrgList('ward'); }
+    else if(route==='constituencies'){ c.innerHTML = await viewConstituencies(); }
+    else if(route==='constituency'){ c.innerHTML = await viewConstituencyDetail(parts[1]); }
+    else if(route==='regional'){ c.innerHTML = await viewRegional(); }
+    else if(route==='wards'){ location.hash = isRegional()?'#/constituencies':('#/constituency/'+(userConId()||'')); return; }
     else if(route==='ward'){ c.innerHTML = await viewOrgDetail('ward', parts[1]); }
     else if(route==='branch'){ c.innerHTML = await viewOrgDetail('branch', parts[1]); }
     else if(route==='unit'){ c.innerHTML = await viewOrgDetail('unit', parts[1]); }
@@ -450,13 +531,21 @@ const LOGO_MARK = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIsAAAB9CAYAAAC
 const LOGO_FULL = "data:image/png;base64,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";
 function tab(route,active,href,label){ return `<a href="${href}" class="${route===active?'active':''}">${label}</a>`; }
 function shell(active){
-  const isAdmin = State.session.role==='constituency_admin';
+  const role = State.session.role;
+  const isAdmin = role==='regional_admin' || role==='constituency_admin';
+  const scopedCon = userConId();
+  // brand context line
+  let ctx = esc(State.settings.region||REGION_NAME);
+  if(scopedCon){ ctx = esc(State.session.scopeConstituencyName || scopedCon); }
+  // registry tab target
+  const regHref = isRegional()? '#/constituencies' : ('#/constituency/'+ (scopedCon||''));
+  const regActive = ['constituencies','constituency','regional','ward','branch','unit'].includes(active)?'constituencies':active;
   return `
   <div class="topbar">
     <div class="topbar-in">
       <div class="brand"><span class="brand-mark"><img src="${LOGO_MARK}" alt="NDC umbrella"></span>
         <div class="brand-txt">
-          <div class="t1">NDC • ${esc(State.settings.constituency)}</div>
+          <div class="t1">NDC • ${ctx}</div>
           <div class="t2">Executive Registry</div>
         </div>
       </div>
@@ -467,7 +556,7 @@ function shell(active){
     </div>
     <nav class="tabs">
       ${tab('dashboard',active,'#/dashboard','Dashboard')}
-      ${tab('wards',active,'#/wards','Registry')}
+      ${tab('constituencies',regActive,regHref,'Registry')}
       ${tab('search',active,'#/search','Search')}
       ${tab('reports',active,'#/reports','Reports')}
       ${tab('album',active,'#/album','Album')}
@@ -487,8 +576,8 @@ function viewLogin(){
     <div class="login-card">
       <div class="login-brand">
         <img class="login-logo" src="${LOGO_FULL}" alt="NDC logo" />
-        <div class="t1">Keten Esikado Constituency</div>
-        <div class="t2">Party Executive Registry</div>
+        <div class="t1">${esc(REGION_NAME)}</div>
+        <div class="t2">NDC Party Executive Registry</div>
       </div>
       <div class="field"><label>Username</label><input id="lu" autocomplete="username" placeholder="Username" /></div>
       <div class="field"><label>Password</label><input id="lp" type="password" autocomplete="current-password" placeholder="••••••••" /></div>
@@ -507,30 +596,48 @@ function wireLogin(){
    DASHBOARD
    ============================================================ */
 async function viewDashboard(){
-  const [wards,branches,units,execs,positions] = await Promise.all([Data.wards(),Data.branches(),Data.units(),Data.execs(),Data.positions()]);
-  const g = {male:0,female:0}; execs.forEach(e=>{ g[e.gender]=(g[e.gender]||0)+1; });
-  const tot = execs.length||1;
-  // coverage: count org units with at least one exec
-  const wardsCovered = new Set(execs.filter(e=>e.level==='ward').map(e=>e.wardId)).size;
-  const branchCovered = new Set(execs.filter(e=>e.level==='branch').map(e=>e.branchId)).size;
-  const unitCovered = new Set(execs.filter(e=>e.level==='unit').map(e=>e.unitId)).size;
+  const g = await loadGraph();
+  const scoped = userConId();
   const recent = (await Data.audits()).slice(0,6);
+  // filter the working set to scope (a constituency for scoped users; everything for regional)
+  const inSet = (e)=>{ if(!scoped) return true; return g.conOf(e)===scoped; };
+  const execs = g.execs.filter(inSet);
+  const wards = scoped? g.wards.filter(w=>w.constituencyId===scoped) : g.wards;
+  const branches = scoped? g.branches.filter(b=>(g.wMap[b.wardId]||{}).constituencyId===scoped) : g.branches;
+  const units = scoped? g.units.filter(u=>{const b=g.bMap[u.branchId];return b&&(g.wMap[b.wardId]||{}).constituencyId===scoped;}) : g.units;
 
+  const gd = {male:0,female:0}; execs.forEach(e=>{ gd[e.gender]=(gd[e.gender]||0)+1; });
+  const tot = execs.length||1;
   const genderBar = `
-    <div class="bar">
-      <i style="width:${g.male/tot*100}%;background:var(--green)"></i>
-      <i style="width:${g.female/tot*100}%;background:var(--gold)"></i>
-    </div>
-    <div class="legend">
-      <span><i class="dot" style="background:var(--green)"></i>Male <b>${g.male||0}</b></span>
-      <span><i class="dot" style="background:var(--gold)"></i>Female <b>${g.female||0}</b></span>
+    <div class="bar"><i style="width:${gd.male/tot*100}%;background:var(--green)"></i><i style="width:${gd.female/tot*100}%;background:var(--gold)"></i></div>
+    <div class="legend"><span><i class="dot" style="background:var(--green)"></i>Male <b>${gd.male||0}</b></span><span><i class="dot" style="background:var(--gold)"></i>Female <b>${gd.female||0}</b></span></div>`;
+
+  const heading = scoped ? ((g.cMap[scoped]||{}).name||'Constituency') : (State.settings.region||REGION_NAME);
+  const fab = `<a class="fab" href="${isRegional()?'#/constituencies':('#/constituency/'+(scoped||''))}" title="Open registry">＋ Register</a>`;
+
+  // Regional roll-up: per-constituency executive counts
+  let regionalBlock='';
+  if(!scoped){
+    const conExec={}; g.execs.forEach(e=>{ const c=g.conOf(e); if(c) conExec[c]=(conExec[c]||0)+1; });
+    const cons = g.cons.slice().sort((a,b)=>(conExec[b.id]||0)-(conExec[a.id]||0)||a.name.localeCompare(b.name));
+    const maxC = Math.max(1, ...cons.map(c=>conExec[c.id]||0));
+    const conWithExecs = cons.filter(c=>conExec[c.id]).length;
+    regionalBlock = `
+    <div class="card pad" style="margin-top:14px">
+      <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Constituencies</h3><span class="badge k">${conWithExecs}/${cons.length} active</span></div>
+      ${cons.map(c=>`<div class="row small" data-link="#/constituency/${c.id}" style="cursor:pointer;padding:6px 0;border-bottom:1px solid var(--line);gap:10px">
+        <span style="font-weight:600;width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span>
+        <span class="bar" style="flex:1"><i style="width:${(conExec[c.id]||0)/maxC*100}%;background:var(--green)"></i></span>
+        <span class="muted tiny" style="width:28px;text-align:right">${conExec[c.id]||0}</span>
+      </div>`).join('')}
     </div>`;
+  }
 
   return `
-  <div class="section-head"><h2>Overview</h2><span class="spacer"></span><span class="badge k">${esc(State.session.fullName||State.session.username)}</span></div>
+  <div class="section-head"><h2>${esc(heading)}</h2><span class="spacer"></span><span class="badge k">${esc(State.session.fullName||State.session.username)}</span></div>
   <div class="grid-stat">
     <div class="stat g"><div class="n">${execs.length}</div><div class="l">Executives</div></div>
-    <div class="stat k"><div class="n">${wards.length}</div><div class="l">Wards</div></div>
+    <div class="stat k"><div class="n">${scoped?wards.length:g.cons.length}</div><div class="l">${scoped?'Wards':'Constituencies'}</div></div>
     <div class="stat y"><div class="n">${branches.length}</div><div class="l">Branches</div></div>
     <div class="stat r"><div class="n">${units.length}</div><div class="l">Units</div></div>
   </div>
@@ -540,11 +647,13 @@ async function viewDashboard(){
     <div style="margin-top:12px">${execs.length?genderBar:'<p class="muted small" style="margin:6px 0 0">No executives registered yet.</p>'}</div>
   </div>
 
+  ${regionalBlock}
+
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:12px">Coverage</h3>
-    ${covRow('Wards with executives', wardsCovered, wards.length)}
-    ${covRow('Branches with executives', branchCovered, branches.length)}
-    ${covRow('Units with executives', unitCovered, units.length)}
+    ${covRow('Wards with executives', new Set(execs.filter(e=>e.level==='ward').map(e=>e.wardId)).size, wards.length)}
+    ${covRow('Branches with executives', new Set(execs.filter(e=>e.level==='branch').map(e=>e.branchId)).size, branches.length)}
+    ${covRow('Units with executives', new Set(execs.filter(e=>e.level==='unit').map(e=>e.unitId)).size, units.length)}
   </div>
 
   <div class="card pad" style="margin-top:14px">
@@ -552,7 +661,7 @@ async function viewDashboard(){
     ${recent.length? recent.map(a=>`<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="badge ${a.action==='DELETE'?'r':a.action.startsWith('CREATE')?'':'k'}">${esc(a.action)}</span><span class="muted" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.detail||a.entityType)}</span><span class="tiny muted">${fmtDate(a.ts)}</span></div>`).join('') : '<p class="muted small">No activity yet.</p>'}
   </div>
 
-  <a class="fab" href="#/wards" title="Open registry">＋ Register</a>`;
+  ${fab}`;
 }
 function covRow(label, n, total){
   const pct = total? Math.round(n/total*100):0;
@@ -563,48 +672,126 @@ function covRow(label, n, total){
 }
 
 /* ============================================================
-   REGISTRY — org unit lists & details
+   REGISTRY — constituencies, wards, branches, units
    ============================================================ */
-async function viewOrgList(level){
-  // top-level registry view = wards; with quick links to branches/units overview
-  const wards = (await Data.wards()).sort((a,b)=>a.name.localeCompare(b.name));
-  const branches = await Data.branches(); const units = await Data.units(); const execs = await Data.execs();
-  const wardExecCount = id => execs.filter(e=>e.level==='ward'&&e.wardId===id).length;
-  const wardBranchCount = id => branches.filter(b=>b.wardId===id).length;
+// Load the whole org graph once with quick lookup maps + a constituency resolver.
+async function loadGraph(){
+  const [cons,wards,branches,units,execs]=await Promise.all([Data.constituencies(),Data.wards(),Data.branches(),Data.units(),Data.execs()]);
+  const cMap={},wMap={},bMap={},uMap={};
+  cons.forEach(c=>cMap[c.id]=c); wards.forEach(w=>wMap[w.id]=w); branches.forEach(b=>bMap[b.id]=b); units.forEach(u=>uMap[u.id]=u);
+  const conOf=(e)=>{ if(!e) return null;
+    if(e.level==='region') return null;
+    if(e.level==='constituency') return e.constituencyId;
+    if(e.level==='ward') return (wMap[e.wardId]||{}).constituencyId||null;
+    if(e.level==='branch'){ const b=bMap[e.branchId]; return b?(wMap[b.wardId]||{}).constituencyId||null:null; }
+    const u=uMap[e.unitId]; const b=u?bMap[u.branchId]:null; return b?(wMap[b.wardId]||{}).constituencyId||null:null;
+  };
+  return {cons,wards,branches,units,execs,cMap,wMap,bMap,uMap,conOf};
+}
+function denyView(){ return emptyState('🔒','Outside your access','This record belongs to a different constituency than the one your account manages.'); }
 
-  const head = `
-  <div class="section-head"><h2>Registry</h2><span class="sub">Wards → Branches → Units</span><span class="spacer"></span>
-    ${can('create')?`<button class="btn primary sm" data-act="newWard">＋ Ward</button>`:''}
-  </div>`;
+async function viewConstituencies(){
+  if(!isRegional()){ const cid=userConId(); return cid? await viewConstituencyDetail(cid) : emptyState('🚫','No constituency assigned','Ask a regional administrator to assign your account to a constituency.'); }
+  const g = await loadGraph();
+  const cons = g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const wardCount = cid=> g.wards.filter(w=>w.constituencyId===cid).length;
+  const conExec = {}; g.execs.forEach(e=>{ const c=g.conOf(e); if(c) conExec[c]=(conExec[c]||0)+1; });
+  const regCount = g.execs.filter(e=>e.level==='region').length;
+  return `
+  <div class="section-head"><h2>Registry</h2><span class="sub">${esc(State.settings.region||REGION_NAME)} • ${cons.length} constituencies</span></div>
 
-  if(!wards.length){
-    return head + emptyState('🗂️','No wards yet','Create a Ward / Electoral Area to begin registering executives.', can('create')?`<button class="btn primary" data-act="newWard">＋ Add ward</button>`:'');
-  }
-  return head + `<div class="list">` + wards.map(w=>`
-    <div class="item org" data-link="#/ward/${w.id}">
+  <div class="item org" data-link="#/regional" style="margin-bottom:12px;border-color:var(--gold)">
+    <div class="icoo" style="background:#fdf3d4;color:#8a6400">⭐</div>
+    <div class="body"><div class="nm">Regional executives</div><div class="mt">${regCount} executive(s) • ${esc(REGION_CODE)} numbering</div></div>
+    <div class="chev">›</div>
+  </div>
+
+  <div class="list">${cons.map(c=>`
+    <div class="item org" data-link="#/constituency/${c.id}">
       <div class="icoo w">🏛️</div>
-      <div class="body"><div class="nm">${esc(w.name)}</div>
-        <div class="mt">${wardBranchCount(w.id)} branch(es) • ${wardExecCount(w.id)} ward exec(s)${w.code?' • '+esc(w.code):''}</div></div>
+      <div class="body"><div class="nm">${esc(c.name)}</div><div class="mt">${wardCount(c.id)} ward(s) • ${conExec[c.id]||0} executive(s) • ${esc(c.code)}</div></div>
       <div class="chev">›</div>
-    </div>`).join('') + `</div>`;
+    </div>`).join('')}</div>`;
+}
+
+async function viewConstituencyDetail(id){
+  const con = await Store.get('con:'+id);
+  if(!con) return emptyState('🚫','Not found','That constituency does not exist.');
+  if(!inScope(id)) return denyView();
+  const positions = await Data.positions();
+  const g = await loadGraph();
+  const ownExecs = g.execs.filter(e=> e.level==='constituency' && e.constituencyId===id);
+  const slate = posForLevel(positions, 'constituency');
+  const filled = new Set(ownExecs.map(e=>e.position));
+  const wards = g.wards.filter(w=>w.constituencyId===id).sort((a,b)=>a.name.localeCompare(b.name));
+  const wardExec = wid=> g.execs.filter(e=>e.level==='ward'&&e.wardId===wid).length;
+  const wardBranch = wid=> g.branches.filter(b=>b.wardId===wid).length;
+  const rootHref = isRegional()?'#/constituencies':'#/dashboard';
+
+  return `
+  <div class="crumb"><a href="${rootHref}">Registry</a><span class="sep">›</span><span>${esc(con.name)}</span></div>
+  <div class="section-head"><h2>${esc(con.name)}</h2><span class="badge">${esc(con.code)}</span><span class="badge k">Constituency</span></div>
+
+  <div class="card pad">
+    <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Constituency executives</h3><span class="badge k">${ownExecs.length}</span><span class="spacer"></span>
+      ${can('create')?`<button class="btn primary sm" data-link="#/exec/new?level=constituency&parent=${id}">＋ Add</button>`:''}
+    </div>
+    <div class="small muted" style="margin-bottom:8px">Positions filled: ${filled.size}/${slate.length}
+      <div class="pip-row">${slate.map(p=>`<span class="pip ${filled.has(p)?'on':''}" title="${esc(p)}${filled.has(p)?' — filled':' — vacant'}"></span>`).join('')}</div>
+    </div>
+    ${ownExecs.length? `<div class="list" style="margin-top:6px">`+ownExecs.map(execItem).join('')+`</div>` : '<p class="muted small" style="margin:6px 0 0">No constituency executives registered yet.</p>'}
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Wards / Electoral areas</h3><span class="badge k">${wards.length}</span><span class="spacer"></span>
+      ${can('create')?`<button class="btn sm" data-act="newWardIn" data-con="${id}">＋ Ward</button>`:''}
+    </div>
+    ${wards.length? `<div class="list">`+wards.map(w=>`
+      <div class="item org" data-link="#/ward/${w.id}">
+        <div class="icoo w">🏛️</div>
+        <div class="body"><div class="nm">${esc(w.name)}</div><div class="mt">${wardBranch(w.id)} branch(es) • ${wardExec(w.id)} ward exec(s)${w.code?' • '+esc(w.code):''}</div></div>
+        <div class="chev">›</div>
+      </div>`).join('')+`</div>` : `<p class="muted small">No wards yet. Add a Ward / Electoral Area to begin.</p>`}
+  </div>`;
+}
+
+async function viewRegional(){
+  if(!isRegional()) return denyView();
+  const positions = await Data.positions();
+  const execs = (await Data.execs()).filter(e=>e.level==='region');
+  const slate = posForLevel(positions,'region');
+  const filled = new Set(execs.map(e=>e.position));
+  return `
+  <div class="crumb"><a href="#/constituencies">Registry</a><span class="sep">›</span><span>Regional executives</span></div>
+  <div class="section-head"><h2>Regional executives</h2><span class="badge y">${esc(REGION_NAME)}</span></div>
+  <div class="card pad">
+    <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Executives</h3><span class="badge k">${execs.length}</span><span class="spacer"></span>
+      ${can('create')?`<button class="btn primary sm" data-link="#/exec/new?level=region&parent=region">＋ Add</button>`:''}
+    </div>
+    <div class="small muted" style="margin-bottom:8px">Positions filled: ${filled.size}/${slate.length}
+      <div class="pip-row">${slate.map(p=>`<span class="pip ${filled.has(p)?'on':''}" title="${esc(p)}${filled.has(p)?' — filled':' — vacant'}"></span>`).join('')}</div>
+    </div>
+    ${execs.length? `<div class="list" style="margin-top:6px">`+execs.map(execItem).join('')+`</div>` : '<p class="muted small" style="margin:6px 0 0">No regional executives registered yet.</p>'}
+  </div>`;
 }
 
 async function viewOrgDetail(level, id){
   const node = await Store.get(level+':'+id);
   if(!node) return emptyState('🚫','Not found','This record may have been deleted.');
+  const conId = await constituencyIdOf(node);
+  if(!inScope(conId)) return denyView();
   const positions = await Data.positions();
   const execs = await Data.execs();
   const ownExecs = execs.filter(e=> e.level===level && e[level+'Id']===id );
   const slate = posForLevel(positions, level);
   const filled = new Set(ownExecs.map(e=>e.position));
-  // children
   let children=[], childLevel=null, childLabel='';
   if(level==='ward'){ childLevel='branch'; childLabel='Branches'; children=(await Data.branches()).filter(b=>b.wardId===id); }
   else if(level==='branch'){ childLevel='unit'; childLabel='Units / Polling stations'; children=(await Data.units()).filter(u=>u.branchId===id); }
 
   const crumbs = await buildCrumb(level,node);
   const execCounts = {};
-  if(childLevel){ const allEx = execs; children.forEach(ch=> execCounts[ch.id]= allEx.filter(e=>e.level===childLevel&&e[childLevel+'Id']===ch.id).length ); }
+  if(childLevel){ children.forEach(ch=> execCounts[ch.id]= execs.filter(e=>e.level===childLevel&&e[childLevel+'Id']===ch.id).length ); }
 
   return `
   ${crumbs}
@@ -645,10 +832,13 @@ function execItem(e){
   </div>`;
 }
 async function buildCrumb(level,node){
-  const parts=[`<a href="#/wards">Registry</a>`];
+  const rootHref = isRegional()?'#/constituencies':('#/constituency/'+(userConId()||''));
+  const parts=[`<a href="${rootHref}">Registry</a>`];
+  const conId = await constituencyIdOf(node);
+  if(conId){ const c=await Store.get('con:'+conId); parts.push(`<span class="sep">›</span><a href="#/constituency/${conId}">${esc(c?c.name:conId)}</a>`); }
   if(level==='ward'){ parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
-  if(level==='branch'){ const w=await Store.get('ward:'+node.wardId); parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Ward')}</a>`,`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
-  if(level==='unit'){ const b=await Store.get('branch:'+node.branchId); const w=b?await Store.get('ward:'+b.wardId):null; if(w)parts.push(`<span class="sep">›</span><a href="#/ward/${w.id}">${esc(w.name)}</a>`); if(b)parts.push(`<span class="sep">›</span><a href="#/branch/${b.id}">${esc(b.name)}</a>`); parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
+  else if(level==='branch'){ const w=await Store.get('ward:'+node.wardId); parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Ward')}</a>`,`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
+  else if(level==='unit'){ const b=await Store.get('branch:'+node.branchId); const w=b?await Store.get('ward:'+b.wardId):null; if(w)parts.push(`<span class="sep">›</span><a href="#/ward/${w.id}">${esc(w.name)}</a>`); if(b)parts.push(`<span class="sep">›</span><a href="#/branch/${b.id}">${esc(b.name)}</a>`); parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
   return `<div class="crumb">${parts.join('')}</div>`;
 }
 
@@ -662,16 +852,23 @@ async function viewExecForm(execId, q){
   const parentId = e? e[level+'Id'] : (q.parent||'');
   const slate = posForLevel(positions, level);
 
-  // parent selector data
+  // parent selector data, scoped to what the user may access
+  const g = await loadGraph();
   let parentField='';
-  if(level==='ward'){
-    const wards = (await Data.wards()).sort((a,b)=>a.name.localeCompare(b.name));
-    parentField = selectField('wardId','Ward / Electoral Area',wards.map(w=>({v:w.id,t:w.name})),parentId,true);
+  if(level==='region'){
+    parentField = `<div class="field"><label>Scope</label><input value="${esc(REGION_NAME)} — regional executive" readonly style="background:var(--green-soft);color:var(--green-dark);font-weight:600"></div>`;
+  } else if(level==='constituency'){
+    let cons = g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    if(!isRegional()) cons = cons.filter(c=>inScope(c.id));
+    parentField = selectField('constituencyId','Constituency',cons.map(c=>({v:c.id,t:c.name})),parentId,true);
+  } else if(level==='ward'){
+    const wards = g.wards.filter(w=>inScope(w.constituencyId)).sort((a,b)=>a.name.localeCompare(b.name));
+    parentField = selectField('wardId','Ward / Electoral Area',wards.map(w=>({v:w.id,t:w.name+' — '+((g.cMap[w.constituencyId]||{}).code||'')})),parentId,true);
   } else if(level==='branch'){
-    const branches = (await Data.branches()).sort((a,b)=>a.name.localeCompare(b.name));
+    const branches = g.branches.filter(b=>inScope(g.conOf({level:'branch',branchId:b.id}))).sort((a,b)=>a.name.localeCompare(b.name));
     parentField = selectField('branchId','Branch',branches.map(b=>({v:b.id,t:b.name})),parentId,true);
   } else {
-    const units = (await Data.units()).sort((a,b)=>a.name.localeCompare(b.name));
+    const units = g.units.filter(u=>inScope(g.conOf({level:'unit',unitId:u.id}))).sort((a,b)=>a.name.localeCompare(b.name));
     parentField = selectField('unitId','Unit / Polling station',units.map(u=>({v:u.id,t:u.name})),parentId,true);
   }
 
@@ -737,17 +934,20 @@ function fieldVal(id){ const el=$('#f_'+id); return el?el.value.trim():''; }
 function setBad(f,bad,msg){ const wrap=document.querySelector(`[data-f="${f}"]`); if(!wrap) return; wrap.classList.toggle('bad',bad); const err=wrap.querySelector('.err'); if(err){ err.classList.toggle('hidden',!bad); if(msg) err.textContent=msg; } }
 async function saveExec(){
   const form=$('#execForm'); const level=form.dataset.level; const id=form.dataset.id;
-  const parentKey = level+'Id';
   const photo=$('#photoData').value;
   const rec={
     fullName:fieldVal('fullName'), position:fieldVal('position'), gender:fieldVal('gender'),
     phone:fieldVal('phone'), email:fieldVal('email'), dob:fieldVal('dob'),
     occupation:fieldVal('occupation'), address:fieldVal('address'), background:fieldVal('background'),
-    [parentKey]:fieldVal(parentKey), photo, level, status:'active'
+    photo, level, status:'active'
   };
+  // parent key depends on level (region has no parent)
+  const parentKey = level==='region' ? null : (level==='constituency' ? 'constituencyId' : level+'Id');
+  if(parentKey) rec[parentKey]=fieldVal(parentKey);
   // validation
   let ok=true;
-  [['fullName'],['position'],['gender'],['phone'],[parentKey]].forEach(([f])=>{ const bad=!rec[f]; setBad(f,bad); if(bad)ok=false; });
+  const required = ['fullName','position','gender','phone'].concat(parentKey?[parentKey]:[]);
+  required.forEach(f=>{ const bad=!rec[f]; setBad(f,bad); if(bad)ok=false; });
   if(rec.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rec.email)){ setBad('email',true,'Enter a valid email.'); ok=false; }
   if(rec.phone && !/^[0-9+()\-\s]{7,15}$/.test(rec.phone)){ setBad('phone',true,'Enter a valid phone number.'); ok=false; }
   if(rec.dob){ const a=age(rec.dob); if(a==null||a<18||a>120){ setBad('dob',true,'Must be a valid adult date of birth.'); ok=false; } }
@@ -758,12 +958,11 @@ async function saveExec(){
   const all = await Data.execs();
   const dup = all.find(e=> e.id!==id && e.status==='active' && e.phone && e.phone.replace(/\s/g,'')===rec.phone.replace(/\s/g,''));
   if(dup){ const go=await confirmModal('Possible duplicate','An executive ('+dup.fullName+') already uses this phone number. Register anyway?'); if(!go) return; }
-  // name + dob soft match
   if(rec.dob){ const soft=all.find(e=>e.id!==id && e.dob===rec.dob && e.fullName.toLowerCase().trim()===rec.fullName.toLowerCase().trim()); if(soft){ const go=await confirmModal('Possible duplicate','Someone with the same name and date of birth is already registered. Continue?'); if(!go) return; } }
 
   const eid = id || uid();
   const existing = id? await Store.get('exec:'+id):null;
-  const regNo = (existing && existing.regNo) ? existing.regNo : await nextRegNo();
+  const regNo = (existing && existing.regNo) ? existing.regNo : await nextRegNo(await prefixForExec(rec));
   const final = Object.assign({}, existing||{}, rec, {id:eid, regNo, updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO(), createdBy:(existing&&existing.createdBy)||State.session.username});
   await Store.set('exec:'+eid, final);
   await audit(id?'UPDATE':'CREATE','executive',eid, (id?'Updated ':'Registered ')+rec.fullName+' ['+regNo+'] ('+LVS[level]+')');
@@ -776,11 +975,17 @@ async function saveExec(){
    ============================================================ */
 async function viewExecProfile(id){
   const e=await Store.get('exec:'+id); if(!e) return emptyState('🚫','Not found','This executive may have been deleted.');
-  let parentName='—', parentLink='#/wards';
-  if(e.level==='ward'){ const w=await Store.get('ward:'+e.wardId); parentName=w?w.name:'—'; parentLink='#/ward/'+e.wardId; }
-  if(e.level==='branch'){ const b=await Store.get('branch:'+e.branchId); parentName=b?b.name:'—'; parentLink='#/branch/'+e.branchId; }
-  if(e.level==='unit'){ const u=await Store.get('unit:'+e.unitId); parentName=u?u.name:'—'; parentLink='#/unit/'+e.unitId; }
+  const conId = await constituencyIdOf(e);
+  if(!inScope(conId)) return denyView();
+  let parentName='—', parentLink='#/constituencies';
+  if(e.level==='region'){ parentName=REGION_NAME; parentLink='#/regional'; }
+  else if(e.level==='constituency'){ const c=await Store.get('con:'+e.constituencyId); parentName=c?c.name:'—'; parentLink='#/constituency/'+e.constituencyId; }
+  else if(e.level==='ward'){ const w=await Store.get('ward:'+e.wardId); parentName=w?w.name:'—'; parentLink='#/ward/'+e.wardId; }
+  else if(e.level==='branch'){ const b=await Store.get('branch:'+e.branchId); parentName=b?b.name:'—'; parentLink='#/branch/'+e.branchId; }
+  else if(e.level==='unit'){ const u=await Store.get('unit:'+e.unitId); parentName=u?u.name:'—'; parentLink='#/unit/'+e.unitId; }
+  const con = conId? await Store.get('con:'+conId) : null;
   const a=age(e.dob);
+  const lvlBadge = e.level==='region'?'y':e.level==='constituency'?'':e.level==='ward'?'k':e.level==='branch'?'y':'r';
   return `
   <div class="crumb"><a href="javascript:history.back()">‹ Back</a></div>
   <div class="card pad">
@@ -789,12 +994,13 @@ async function viewExecProfile(id){
       <div style="min-width:0;flex:1">
         ${e.regNo?`<div class="reg-tag">${esc(e.regNo)}</div>`:''}
         <h2 style="font-size:20px">${esc(e.fullName)}</h2>
-        <div style="margin:6px 0"><span class="badge">${esc(e.position||'—')}</span> <span class="badge ${e.level==='ward'?'k':e.level==='branch'?'y':'r'}">${LVS[e.level]}</span></div>
-        <div class="small muted">${esc(parentName)}</div>
+        <div style="margin:6px 0"><span class="badge">${esc(e.position||'—')}</span> <span class="badge ${lvlBadge}">${LVS[e.level]}</span></div>
+        <div class="small muted">${con?esc(con.name)+' • ':''}${esc(parentName)}</div>
       </div>
     </div>
     <dl class="kv" style="margin-top:16px">
       <dt>Registration no.</dt><dd><b>${esc(e.regNo||'—')}</b></dd>
+      <dt>Constituency</dt><dd>${con?`<a href="#/constituency/${conId}">${esc(con.name)}</a>`:(e.level==='region'?esc(REGION_NAME):'—')}</dd>
       <dt>Phone</dt><dd>${esc(e.phone||'—')}</dd>
       <dt>Email</dt><dd>${esc(e.email||'—')}</dd>
       <dt>Gender</dt><dd>${esc((e.gender||'—').replace(/^./,c=>c.toUpperCase()))}</dd>
@@ -816,43 +1022,64 @@ async function viewExecProfile(id){
    SEARCH
    ============================================================ */
 async function viewSearch(q){
-  const execs=await Data.execs();
+  const g = await loadGraph();
+  const scoped = userConId();
+  // annotate each exec with its constituency and a location label, then scope
+  const execs = g.execs.filter(e=> scoped? g.conOf(e)===scoped : true).map(e=>{
+    const cid=g.conOf(e); const con=cid?g.cMap[cid]:null;
+    let loc='';
+    if(e.level==='region') loc=REGION_NAME;
+    else if(e.level==='constituency') loc=(con?con.name:'')+' (Constituency)';
+    else if(e.level==='ward') loc=((g.wMap[e.wardId]||{}).name||'')+' (Ward)';
+    else if(e.level==='branch') loc=((g.bMap[e.branchId]||{}).name||'')+' (Branch)';
+    else loc=((g.uMap[e.unitId]||{}).name||'')+' (Unit)';
+    return Object.assign({}, e, {_con:con?con.name:(e.level==='region'?REGION_NAME:''), _conId:cid, _loc:loc});
+  });
   State._searchCache=execs;
-  const wards=await Data.wards(), branches=await Data.branches(), units=await Data.units();
-  const wardName=id=>{const w=wards.find(x=>x.id===id);return w?w.name:'';};
-  const branchName=id=>{const b=branches.find(x=>x.id===id);return b?b.name:'';};
-  const unitName=id=>{const u=units.find(x=>x.id===id);return u?u.name:'';};
+  const conFilter = (isRegional()) ? `<select id="fcon"><option value="">All constituencies</option>${g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>` : '';
   return `
-  <div class="section-head"><h2>Search</h2></div>
-  <div class="searchbar"><input id="sq" placeholder="Search by name, position, phone…" value="${esc(q.q||'')}"><button class="btn primary" data-act="runSearch">Search</button></div>
+  <div class="section-head"><h2>Search</h2>${scoped?`<span class="sub">${esc((g.cMap[scoped]||{}).name||'')}</span>`:''}</div>
+  <div class="searchbar"><input id="sq" placeholder="Search by name, position, phone, reg no…" value="${esc(q.q||'')}"><button class="btn primary" data-act="runSearch">Search</button></div>
   <div class="filters">
-    <select id="flevel"><option value="">All levels</option><option value="ward">Ward</option><option value="branch">Branch</option><option value="unit">Unit</option></select>
+    ${conFilter}
+    <select id="flevel"><option value="">All levels</option><option value="region">Region</option><option value="constituency">Constituency</option><option value="ward">Ward</option><option value="branch">Branch</option><option value="unit">Unit</option></select>
     <select id="fgender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
-    <select id="fsort"><option value="name">Sort: Name</option><option value="position">Sort: Position</option><option value="recent">Sort: Recent</option></select>
+    <select id="fsort"><option value="reg">Sort: Reg. number</option><option value="name">Sort: Name</option><option value="position">Sort: Position</option><option value="recent">Sort: Recent</option></select>
   </div>
-  <div id="results"><p class="muted small">${execs.length} executive(s) in the registry. Type to filter.</p></div>`;
+  <div id="results"><p class="muted small">${execs.length} executive(s) ${scoped?'in your constituency':'across the region'}. Type to filter.</p></div>`;
+}
+function albumResultItem(e){
+  return `<div class="item" data-link="#/exec/${e.id}">
+    <div class="av">${e.photo?`<img src="${e.photo}" alt="">`:initials(e.fullName)}</div>
+    <div class="body"><div class="nm">${esc(e.fullName)}</div><div class="mt">${e.regNo?`<span class="reg">${esc(e.regNo)}</span> • `:''}${esc(e.position||'—')}${e._con?' • '+esc(e._con):''}</div></div>
+    <div class="chev">›</div>
+  </div>`;
 }
 function wireSearch(){
   const run=()=>{
     const execs=State._searchCache||[];
     const q=($('#sq').value||'').toLowerCase().trim();
     const lv=$('#flevel').value, gn=$('#fgender').value, sort=$('#fsort').value;
+    const conEl=$('#fcon'); const con=conEl?conEl.value:'';
     let out=execs.filter(e=>{
+      if(con&&e._conId!==con) return false;
       if(lv&&e.level!==lv) return false;
       if(gn&&e.gender!==gn) return false;
-      if(q){ const hay=(e.fullName+' '+e.position+' '+e.phone+' '+(e.email||'')).toLowerCase(); if(!hay.includes(q)) return false; }
+      if(q){ const hay=(e.fullName+' '+e.position+' '+e.phone+' '+(e.email||'')+' '+(e.regNo||'')).toLowerCase(); if(!hay.includes(q)) return false; }
       return true;
     });
     if(sort==='name') out.sort((a,b)=>a.fullName.localeCompare(b.fullName));
     else if(sort==='position') out.sort((a,b)=>(a.position||'').localeCompare(b.position||''));
-    else out.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+    else if(sort==='recent') out.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+    else out.sort((a,b)=>String(a.regNo||'').localeCompare(String(b.regNo||'')));
     const box=$('#results');
-    box.innerHTML = out.length? `<p class="muted small" style="margin-bottom:8px">${out.length} result(s)</p><div class="list">`+out.map(execItem).join('')+`</div>` : '<div class="empty"><div class="e-ico">🔍</div><h3>No matches</h3><p>Try a different name, position, or filter.</p></div>';
+    box.innerHTML = out.length? `<p class="muted small" style="margin-bottom:8px">${out.length} result(s)</p><div class="list">`+out.map(albumResultItem).join('')+`</div>` : '<div class="empty"><div class="e-ico">🔍</div><h3>No matches</h3><p>Try a different name, position, or filter.</p></div>';
     box.querySelectorAll('[data-link]').forEach(el=>el.onclick=()=>{location.hash=el.dataset.link;render();});
   };
   $('[data-act=runSearch]').onclick=run;
   $('#sq').oninput=run; $('#sq').addEventListener('keydown',e=>{if(e.key==='Enter')run();});
   $('#flevel').onchange=run; $('#fgender').onchange=run; $('#fsort').onchange=run;
+  const conEl=$('#fcon'); if(conEl) conEl.onchange=run;
   if($('#sq').value) run();
 }
 
@@ -860,26 +1087,34 @@ function wireSearch(){
    REPORTS
    ============================================================ */
 async function viewReports(){
-  const [wards,branches,units,execs,positions]=await Promise.all([Data.wards(),Data.branches(),Data.units(),Data.execs(),Data.positions()]);
+  const g = await loadGraph();
+  const positions = await Data.positions();
+  const scoped = userConId();
+  const inSet = (e)=> scoped? g.conOf(e)===scoped : true;
+  const execs = g.execs.filter(inSet);
+  const wards = scoped? g.wards.filter(w=>w.constituencyId===scoped) : g.wards;
+  const branches = scoped? g.branches.filter(b=>(g.wMap[b.wardId]||{}).constituencyId===scoped) : g.branches;
+  const units = scoped? g.units.filter(u=>{const b=g.bMap[u.branchId];return b&&(g.wMap[b.wardId]||{}).constituencyId===scoped;}) : g.units;
   const byLevel = l=>execs.filter(e=>e.level===l);
-  const genderOf = arr=>{const g={male:0,female:0};arr.forEach(e=>g[e.gender]=(g[e.gender]||0)+1);return g;};
-  const lvRow = (l)=>{ const arr=byLevel(l); const g=genderOf(arr); const t=arr.length||1;
-    return `<tr-row><div class="row small" style="padding:8px 0;border-bottom:1px solid var(--line)">
-      <span style="font-weight:700;width:64px">${LVS[l]}</span>
-      <span class="bar" style="flex:1"><i style="width:${g.male/t*100}%;background:var(--green)"></i><i style="width:${g.female/t*100}%;background:var(--gold)"></i></span>
-      <span class="muted tiny" style="width:118px;text-align:right">M ${g.male} • F ${g.female}</span>
-    </div></tr-row>`; };
+  const genderOf = arr=>{const gg={male:0,female:0};arr.forEach(e=>gg[e.gender]=(gg[e.gender]||0)+1);return gg;};
+  const levels = scoped? ['constituency','ward','branch','unit'] : ['region','constituency','ward','branch','unit'];
+  const lvRow = (l)=>{ const arr=byLevel(l); const gg=genderOf(arr); const t=arr.length||1;
+    return `<div class="row small" style="padding:8px 0;border-bottom:1px solid var(--line)">
+      <span style="font-weight:700;width:88px">${LVS[l]}</span>
+      <span class="bar" style="flex:1"><i style="width:${gg.male/t*100}%;background:var(--green)"></i><i style="width:${gg.female/t*100}%;background:var(--gold)"></i></span>
+      <span class="muted tiny" style="width:96px;text-align:right">M ${gg.male} • F ${gg.female}</span>
+    </div>`; };
 
-  // incomplete coverage: units with no execs
   const unitNoExec = units.filter(u=>!execs.some(e=>e.level==='unit'&&e.unitId===u.id));
   const branchNoExec = branches.filter(b=>!execs.some(e=>e.level==='branch'&&e.branchId===b.id));
+  const scopeLabel = scoped? ((g.cMap[scoped]||{}).name||'') : (State.settings.region||REGION_NAME);
 
   return `
-  <div class="section-head"><h2>Reports & analytics</h2><span class="spacer"></span><button class="btn sm" data-link="#/album">📸 Photo album</button><button class="btn sm" data-act="exportReport">⬇ Export CSV</button></div>
+  <div class="section-head"><h2>Reports & analytics</h2><span class="sub">${esc(scopeLabel)}</span><span class="spacer"></span><button class="btn sm" data-link="#/album">📸 Photo album</button><button class="btn sm" data-act="exportReport">⬇ Export CSV</button></div>
 
   <div class="card pad">
     <h3 style="font-size:15px;margin-bottom:6px">Gender distribution by level</h3>
-    ${['ward','branch','unit'].map(lvRow).join('').replace(/<\/?tr-row>/g,'')}
+    ${levels.map(lvRow).join('')}
     <div class="legend"><span><i class="dot" style="background:var(--green)"></i>Male</span><span><i class="dot" style="background:var(--gold)"></i>Female</span></div>
   </div>
 
@@ -895,10 +1130,12 @@ async function viewReports(){
     <h3 style="font-size:15px;margin-bottom:10px">Totals</h3>
     <div class="kv">
       <dt>Total executives</dt><dd>${execs.length}</dd>
+      ${!scoped?`<dt>Region level</dt><dd>${byLevel('region').length}</dd>`:''}
+      <dt>Constituency level</dt><dd>${byLevel('constituency').length}</dd>
       <dt>Ward level</dt><dd>${byLevel('ward').length}</dd>
       <dt>Branch level</dt><dd>${byLevel('branch').length}</dd>
       <dt>Unit level</dt><dd>${byLevel('unit').length}</dd>
-      <dt>Wards / Branches / Units</dt><dd>${wards.length} / ${branches.length} / ${units.length}</dd>
+      <dt>${scoped?'Wards / Branches / Units':'Constituencies / Wards / Branches / Units'}</dt><dd>${scoped?'':(g.cons.length+' / ')}${wards.length} / ${branches.length} / ${units.length}</dd>
     </div>
   </div>`;
 }
@@ -907,34 +1144,44 @@ async function viewReports(){
    PHOTO ALBUM
    ============================================================ */
 async function viewAlbum(q){
-  const [wards,branches,units,execs]=await Promise.all([Data.wards(),Data.branches(),Data.units(),Data.execs()]);
-  const wMap={}, bMap={}, uMap={};
-  wards.forEach(w=>wMap[w.id]=w); branches.forEach(b=>bMap[b.id]=b); units.forEach(u=>uMap[u.id]=u);
-  // enrich each exec with its ward grouping and a location label
-  const enriched = execs.map(e=>{
-    let wardId=null, wardName='Unassigned', loc='';
-    if(e.level==='ward'){ const w=wMap[e.wardId]; wardId=e.wardId; wardName=w?w.name:'Unassigned'; loc=(w?w.name:'')+' (Ward)'; }
-    else if(e.level==='branch'){ const b=bMap[e.branchId]; const w=b?wMap[b.wardId]:null; wardId=b?b.wardId:null; wardName=w?w.name:'Unassigned'; loc=(b?b.name:'—')+' (Branch)'; }
-    else { const u=uMap[e.unitId]; const b=u?bMap[u.branchId]:null; const w=b?wMap[b.wardId]:null; wardId=b?b.wardId:null; wardName=w?w.name:'Unassigned'; loc=(u?u.name:'—')+(b?' • '+b.name:'')+' (Unit)'; }
-    return Object.assign({}, e, {_wardId:wardId, _wardName:wardName, _loc:loc});
-  });
-  State._album = {execs:enriched, wards};
+  const g = await loadGraph();
+  const scoped = userConId();
+  const inSet = (e)=> scoped? g.conOf(e)===scoped : true;
+  const execs = g.execs.filter(inSet);
+  const wards = scoped? g.wards.filter(w=>w.constituencyId===scoped) : g.wards;
 
-  const wardOpts = `<option value="">All wards</option>`+wards.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(w=>`<option value="${w.id}" ${q.ward===w.id?'selected':''}>${esc(w.name)}</option>`).join('');
-  const levelOpts = `<option value="">All levels</option>`+['ward','branch','unit'].map(l=>`<option value="${l}" ${q.level===l?'selected':''}>${LVS[l]}</option>`).join('');
+  // enrich each exec with constituency, group key, and a location label
+  const enriched = execs.map(e=>{
+    const cid=g.conOf(e); const con=cid?g.cMap[cid]:null;
+    let groupKey, groupName, loc='';
+    if(e.level==='region'){ groupKey='__region'; groupName=REGION_NAME; loc=REGION_NAME+' (Region)'; }
+    else if(e.level==='constituency'){ groupKey='con:'+cid; groupName=con?con.name:'—'; loc=(con?con.name:'')+' (Constituency)'; }
+    else {
+      groupKey='con:'+cid; groupName=con?con.name:'Unassigned';
+      if(e.level==='ward'){ const w=g.wMap[e.wardId]; loc=(w?w.name:'')+' (Ward)'; }
+      else if(e.level==='branch'){ const b=g.bMap[e.branchId]; loc=(b?b.name:'—')+' (Branch)'; }
+      else { const u=g.uMap[e.unitId]; const b=u?g.bMap[u.branchId]:null; loc=(u?u.name:'—')+(b?' • '+b.name:'')+' (Unit)'; }
+    }
+    return Object.assign({}, e, {_conId:cid, _con:con?con.name:'', _groupKey:groupKey, _groupName:groupName, _loc:loc});
+  });
+  State._album = {execs:enriched, wards, cons:g.cons};
+
+  const conOpts = isRegional() ? `<option value="">All constituencies</option>`+g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="con:${c.id}" ${q.con==='con:'+c.id?'selected':''}>${esc(c.name)}</option>`).join('') : '';
+  const levelOpts = `<option value="">All levels</option>`+(scoped?['constituency','ward','branch','unit']:['region','constituency','ward','branch','unit']).map(l=>`<option value="${l}" ${q.level===l?'selected':''}>${LVS[l]}</option>`).join('');
+  const scopeName = scoped? ((g.cMap[scoped]||{}).name||'') : (State.settings.region||REGION_NAME);
 
   return `
   <div class="album-print-head print-only">
     <img src="${LOGO_FULL}" alt="NDC">
-    <div class="pt">${esc(State.settings.constituency)} Constituency</div>
+    <div class="pt">${esc(scopeName)}${scoped?' Constituency':''}</div>
     <div class="ps" id="albumPrintMeta">Executive Photo Album</div>
   </div>
 
-  <div class="section-head no-print"><h2>Photo album</h2><span class="sub">Passport photos by ward</span><span class="spacer"></span>
+  <div class="section-head no-print"><h2>Photo album</h2><span class="sub">${esc(scopeName)}</span><span class="spacer"></span>
     <button class="btn sm primary" data-act="printAlbum">🖨️ Print / Save PDF</button>
   </div>
   <div class="filters no-print">
-    <select id="albWard">${wardOpts}</select>
+    ${conOpts?`<select id="albCon">${conOpts}</select>`:''}
     <select id="albLevel">${levelOpts}</select>
     <select id="albSort"><option value="reg">Sort: Reg. number</option><option value="name">Sort: Name</option></select>
   </div>
@@ -943,11 +1190,11 @@ async function viewAlbum(q){
 
 function albumRenderBody(){
   const data = State._album; if(!data) return;
-  const wardF = $('#albWard') ? $('#albWard').value : '';
+  const conF = $('#albCon') ? $('#albCon').value : '';
   const levelF = $('#albLevel') ? $('#albLevel').value : '';
   const sortF = $('#albSort') ? $('#albSort').value : 'reg';
   let list = data.execs.filter(e=>{
-    if(wardF && e._wardId!==wardF) return false;
+    if(conF && e._groupKey!==conF) return false;
     if(levelF && e.level!==levelF) return false;
     return true;
   });
@@ -956,13 +1203,16 @@ function albumRenderBody(){
     : (a,b)=> String(a.regNo||'').localeCompare(String(b.regNo||''));
   list.sort(sorter);
 
-  // group by ward
+  // group by constituency (regional view) / ward (scoped view, via _loc)
   const groups={};
-  list.forEach(e=>{ (groups[e._wardName]=groups[e._wardName]||[]).push(e); });
-  const wardNames = Object.keys(groups).sort((a,b)=>a==='Unassigned'?1:b==='Unassigned'?-1:a.localeCompare(b));
+  list.forEach(e=>{ (groups[e._groupName]=groups[e._groupName]||[]).push(e); });
+  const groupNames = Object.keys(groups).sort((a,b)=>a==='Unassigned'?1:b==='Unassigned'?-1:a.localeCompare(b));
 
   const meta = $('#albumPrintMeta');
-  if(meta){ const scope = wardF ? (data.wards.find(w=>w.id===wardF)||{}).name : 'All wards'; meta.textContent = `Executive Photo Album • ${scope}${levelF?' • '+LVS[levelF]:''} • ${list.length} executive(s) • ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}`; }
+  if(meta){
+    const scope = conF ? ((data.cons.find(c=>'con:'+c.id===conF)||{}).name||'') : 'All constituencies';
+    meta.textContent = `Executive Photo Album • ${scope}${levelF?' • '+LVS[levelF]:''} • ${list.length} executive(s) • ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}`;
+  }
 
   const body = $('#albumBody'); if(!body) return;
   if(!list.length){ body.innerHTML = `<div class="empty"><div class="e-ico">📸</div><h3>No photos to show</h3><p>No executives match these filters yet.</p></div>`; return; }
@@ -979,9 +1229,9 @@ function albumRenderBody(){
     </div>`;
 
   body.innerHTML = `<div class="small muted no-print" style="margin-bottom:6px">${list.length} executive(s)</div>` +
-    wardNames.map(wn=>`
-      <div class="album-ward-head">${esc(wn)} <span class="ct">${groups[wn].length}</span></div>
-      <div class="album-grid">${groups[wn].map(card).join('')}</div>
+    groupNames.map(gn=>`
+      <div class="album-ward-head">${esc(gn)} <span class="ct">${groups[gn].length}</span></div>
+      <div class="album-grid">${groups[gn].map(card).join('')}</div>
     `).join('');
 
   // make cards clickable on screen
@@ -990,7 +1240,7 @@ function albumRenderBody(){
 
 function wireAlbum(){
   albumRenderBody();
-  ['albWard','albLevel','albSort'].forEach(id=>{ const el=$('#'+id); if(el) el.onchange=albumRenderBody; });
+  ['albCon','albLevel','albSort'].forEach(id=>{ const el=$('#'+id); if(el) el.onchange=albumRenderBody; });
   const pb=$('[data-act=printAlbum]'); if(pb) pb.onclick=()=>window.print();
 }
 
@@ -998,17 +1248,18 @@ function wireAlbum(){
    DATA — import / export / backup / restore
    ============================================================ */
 async function viewData(){
+  const scoped = userConId();
   return `
   <div class="section-head"><h2>Data tools</h2></div>
   <div class="card pad">
     <h3 style="font-size:15px;margin-bottom:4px">Export executives</h3>
-    <p class="muted small" style="margin:0 0 12px">Download all executive records as a spreadsheet (CSV). Photos are not included.</p>
+    <p class="muted small" style="margin:0 0 12px">Download ${scoped?'your constituency\'s':'all'} executive records as a spreadsheet (CSV). Photos are not included.</p>
     <div class="row wrap"><button class="btn" data-act="exportCsv">⬇ Export CSV</button><button class="btn" data-act="downloadTemplate">📄 Download import template</button></div>
   </div>
 
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:4px">Import executives</h3>
-    <p class="muted small" style="margin:0 0 12px">Upload a CSV matching the template. Wards, branches, and units are matched by name and created if missing. Rows are validated before import. Registration numbers are assigned automatically.</p>
+    <p class="muted small" style="margin:0 0 12px">Upload a CSV matching the template. Constituencies, wards, branches, and units are matched by name and created if missing. Rows are validated before import. Registration numbers are assigned automatically with the correct constituency prefix.</p>
     <input type="file" id="csvIn" accept=".csv" class="hidden">
     <button class="btn" data-act="pickCsv">⬆ Choose CSV file</button>
     <div id="importReport" style="margin-top:12px"></div>
@@ -1019,11 +1270,11 @@ async function viewData(){
     <p class="muted small" style="margin:0 0 12px">A full backup includes every record and photo as a single file you can store safely or move to another device.</p>
     <div class="row wrap">
       <button class="btn" data-act="backup">💾 Download full backup</button>
-      ${State.session.role==='constituency_admin'?`<input type="file" id="bkIn" accept=".json" class="hidden"><button class="btn danger" data-act="restore">♻ Restore from backup</button>`:''}
+      ${(State.session.role==='regional_admin'||State.session.role==='constituency_admin')?`<input type="file" id="bkIn" accept=".json" class="hidden"><button class="btn danger" data-act="restore">♻ Restore from backup</button>`:''}
     </div>
   </div>`;
 }
-const CSV_COLS = ['level','ward','branch','unit','fullName','position','gender','phone','email','dob','occupation','address','background'];
+const CSV_COLS = ['level','constituency','ward','branch','unit','fullName','position','gender','phone','email','dob','occupation','address','background'];
 const EXPORT_COLS = ['regNo'].concat(CSV_COLS);
 function csvEscape(v){ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 function toCSV(rows, cols=CSV_COLS){ return [cols.join(',')].concat(rows.map(r=>cols.map(c=>csvEscape(r[c])).join(','))).join('\n'); }
@@ -1040,12 +1291,23 @@ function parseCSV(text){
 function download(name, content, type='text/plain'){ const blob=new Blob([content],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); }
 
 async function exportExecsCSV(){
-  const [execs,wards,branches,units]=await Promise.all([Data.execs(),Data.wards(),Data.branches(),Data.units()]);
-  const wn=id=>{const x=wards.find(w=>w.id===id);return x?x.name:'';};
-  const bn=id=>{const x=branches.find(b=>b.id===id);return x?x.name:'';};
-  const un=id=>{const x=units.find(u=>u.id===id);return x?x.name:'';};
-  const rows=execs.map(e=>({regNo:e.regNo||'', level:e.level, ward:e.level==='ward'?wn(e.wardId):(e.level==='branch'?wn((branches.find(b=>b.id===e.branchId)||{}).wardId):''), branch:e.level==='branch'?bn(e.branchId):(e.level==='unit'?bn((units.find(u=>u.id===e.unitId)||{}).branchId):''), unit:e.level==='unit'?un(e.unitId):'', fullName:e.fullName, position:e.position, gender:e.gender, phone:e.phone, email:e.email, dob:e.dob, occupation:e.occupation, address:e.address, background:e.background}));
-  download(`ndc_keten_executives_${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows, EXPORT_COLS),'text/csv');
+  const g = await loadGraph();
+  const scoped = userConId();
+  const execs = g.execs.filter(e=> scoped? g.conOf(e)===scoped : true);
+  const wn=id=>{const x=(g.wMap[id]||{});return x.name||'';};
+  const bn=id=>{const x=(g.bMap[id]||{});return x.name||'';};
+  const un=id=>{const x=(g.uMap[id]||{});return x.name||'';};
+  const cn=(e)=>{ const cid=g.conOf(e); if(!cid) return e.level==='region'?REGION_NAME:''; return (g.cMap[cid]||{}).name||''; };
+  const rows=execs.map(e=>({
+    regNo:e.regNo||'', level:e.level,
+    constituency: e.level==='constituency'? (g.cMap[e.constituencyId]||{}).name||'' : cn(e),
+    ward:e.level==='ward'?wn(e.wardId):(e.level==='branch'?wn((g.bMap[e.branchId]||{}).wardId):(e.level==='unit'?wn((g.bMap[(g.uMap[e.unitId]||{}).branchId]||{}).wardId):'')),
+    branch:e.level==='branch'?bn(e.branchId):(e.level==='unit'?bn((g.uMap[e.unitId]||{}).branchId):''),
+    unit:e.level==='unit'?un(e.unitId):'',
+    fullName:e.fullName, position:e.position, gender:e.gender, phone:e.phone, email:e.email, dob:e.dob, occupation:e.occupation, address:e.address, background:e.background
+  }));
+  const fname = scoped? `ndc_${((g.cMap[scoped]||{}).code||scoped).toLowerCase()}_executives_${new Date().toISOString().slice(0,10)}.csv` : `ndc_western_region_executives_${new Date().toISOString().slice(0,10)}.csv`;
+  download(fname, toCSV(rows, EXPORT_COLS),'text/csv');
   await audit('EXPORT','executive','','Exported '+rows.length+' executives to CSV');
   toast('Exported '+rows.length+' record(s)');
 }
@@ -1053,32 +1315,45 @@ async function importCSV(file){
   const text=await file.text(); const rows=parseCSV(text); if(rows.length<2){ toast('File looks empty',true); return; }
   const header=rows[0].map(h=>h.trim()); const idx={}; CSV_COLS.forEach(c=>idx[c]=header.indexOf(c));
   if(idx.fullName<0||idx.level<0){ toast('Missing required columns (level, fullName)',true); return; }
-  let wards=await Data.wards(), branches=await Data.branches(), units=await Data.units();
-  const findOrCreate=async (type,name,parentField,parentId)=>{
+  const g = await loadGraph();
+  const scoped = userConId();
+  let wards=g.wards.slice(), branches=g.branches.slice(), units=g.units.slice(), cons=g.cons.slice();
+  const findCon=async (name)=>{
+    name=(name||'').trim();
+    if(!name) return scoped||null;
+    let found = cons.find(c=>c.name.toLowerCase()===name.toLowerCase() || c.code.toLowerCase()===name.toLowerCase());
+    return found? found.id : (scoped||null);
+  };
+  const findOrCreate=async (type,name,parentField,parentId,extra)=>{
     name=(name||'').trim(); if(!name) return null;
     let coll = type==='ward'?wards:type==='branch'?branches:units;
     let found = coll.find(x=>x.name.toLowerCase()===name.toLowerCase() && (!parentField || x[parentField]===parentId));
     if(found) return found;
-    const rec={id:uid(),name,type,createdAt:nowISO(),updatedAt:nowISO()}; if(parentField) rec[parentField]=parentId;
+    const rec=Object.assign({id:uid(),name,type,createdAt:nowISO(),updatedAt:nowISO()}, extra||{}); if(parentField) rec[parentField]=parentId;
     await Store.set(type+':'+rec.id,rec); coll.push(rec); return rec;
   };
   let ok=0, fail=0, errs=[];
   for(let r=1;r<rows.length;r++){
     const row=rows[r]; if(!row.length||!(row[idx.fullName]||'').trim()) continue;
-    const g=(k)=>(idx[k]>=0?(row[idx[k]]||'').trim():'');
-    const level=g('level').toLowerCase();
-    if(!['ward','branch','unit'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level`); continue; }
-    if(!g('fullName')||!g('position')||!g('gender')||!g('phone')){ fail++; errs.push(`Row ${r+1}: missing required field`); continue; }
+    const get=(k)=>(idx[k]>=0?(row[idx[k]]||'').trim():'');
+    const level=get('level').toLowerCase();
+    if(!['region','constituency','ward','branch','unit'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level`); continue; }
+    if(!get('fullName')||!get('position')||!get('gender')||!get('phone')){ fail++; errs.push(`Row ${r+1}: missing required field`); continue; }
+    const conId = await findCon(get('constituency'));
+    if(level!=='region' && !conId){ fail++; errs.push(`Row ${r+1}: constituency not found / not in your scope`); continue; }
+    if(level!=='region' && !inScope(conId)){ fail++; errs.push(`Row ${r+1}: constituency outside your scope`); continue; }
     let wardId=null,branchId=null,unitId=null;
-    const w=await findOrCreate('ward',g('ward'),null,null); if(w) wardId=w.id;
-    if(level!=='ward'){ const b=await findOrCreate('branch',g('branch'),'wardId',wardId); if(b) branchId=b.id; }
-    if(level==='unit'){ const u=await findOrCreate('unit',g('unit'),'branchId',branchId); if(u) unitId=u.id; }
+    if(level==='ward'||level==='branch'||level==='unit'){ const w=await findOrCreate('ward',get('ward'),null,null,{constituencyId:conId}); if(w) wardId=w.id; }
+    if(level==='branch'||level==='unit'){ const b=await findOrCreate('branch',get('branch'),'wardId',wardId); if(b) branchId=b.id; }
+    if(level==='unit'){ const u=await findOrCreate('unit',get('unit'),'branchId',branchId); if(u) unitId=u.id; }
     if(level==='ward'&&!wardId){ fail++; errs.push(`Row ${r+1}: ward name required`); continue; }
     if(level==='branch'&&!branchId){ fail++; errs.push(`Row ${r+1}: branch name required`); continue; }
     if(level==='unit'&&!unitId){ fail++; errs.push(`Row ${r+1}: unit name required`); continue; }
     const id=uid();
-    const rec={id, regNo: await nextRegNo(), level, fullName:g('fullName'), position:g('position'), gender:(g('gender').toLowerCase()), phone:g('phone'), email:g('email'), dob:g('dob'), occupation:g('occupation'), address:g('address'), background:g('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
-    rec[level+'Id'] = level==='ward'?wardId:level==='branch'?branchId:unitId;
+    const rec={id, level, fullName:get('fullName'), position:get('position'), gender:(get('gender').toLowerCase()), phone:get('phone'), email:get('email'), dob:get('dob'), occupation:get('occupation'), address:get('address'), background:get('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
+    if(level==='constituency') rec.constituencyId=conId;
+    else if(level!=='region') rec[level+'Id'] = level==='ward'?wardId:level==='branch'?branchId:unitId;
+    rec.regNo = await nextRegNo(await prefixForExec(rec));
     await Store.set('exec:'+id,rec); ok++;
   }
   await audit('IMPORT','executive','',`Imported ${ok} executives (${fail} failed)`);
@@ -1088,7 +1363,7 @@ async function importCSV(file){
 async function fullBackup(){
   const keys=await Store.keys(''); const dump={};
   for(const k of keys){ dump[k]=await Store.get(k); }
-  download(`ndc_keten_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify({app:'ndc-keten',version:'1.0',at:nowISO(),data:dump},null,0),'application/json');
+  download(`ndc_western_region_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify({app:'ndc-western-region',version:'2.0',at:nowISO(),data:dump},null,0),'application/json');
   await audit('BACKUP','system','','Full backup downloaded');
   toast('Backup downloaded');
 }
@@ -1103,7 +1378,7 @@ async function restoreBackup(file){
 }
 function wireData(){
   $('[data-act=exportCsv]').onclick=exportExecsCSV;
-  $('[data-act=downloadTemplate]').onclick=()=>{ download('ndc_import_template.csv', CSV_COLS.join(',')+'\nward,Esikado Central,,,Ama Mensah,Chairman,female,0244000000,,1985-03-12,Trader,Esikado,5 years organizing\n','text/csv'); };
+  $('[data-act=downloadTemplate]').onclick=()=>{ download('ndc_import_template.csv', CSV_COLS.join(',')+'\nward,Essikado-Ketan,Esikado Central,,,Ama Mensah,Chairman,female,0244000000,,1985-03-12,Trader,Esikado,5 years organizing\n','text/csv'); };
   const ci=$('#csvIn'); $('[data-act=pickCsv]').onclick=()=>ci.click(); ci.onchange=e=>{ if(e.target.files[0]) importCSV(e.target.files[0]); };
   $('[data-act=backup]').onclick=fullBackup;
   const bk=$('#bkIn'); if(bk){ $('[data-act=restore]').onclick=()=>bk.click(); bk.onchange=e=>{ if(e.target.files[0]) restoreBackup(e.target.files[0]); }; }
@@ -1113,42 +1388,49 @@ function wireData(){
    ADMIN — users & positions & settings
    ============================================================ */
 async function viewAdmin(){
-  const users=await Data.users(); const wards=await Data.wards(); const branches=await Data.branches();
+  const g = await loadGraph();
+  const users=await Data.users();
+  const conName = (cid)=> cid? ((g.cMap[cid]||{}).name||cid) : '—';
+  const settingsCard = isRegional() ? `
+  <div class="card pad">
+    <h3 style="font-size:15px;margin-bottom:4px">Region</h3>
+    <div class="grid2" style="margin-top:8px">
+      <div class="field" style="margin:0"><label>Region name</label><input id="setReg" value="${esc(State.settings.region||REGION_NAME)}"></div>
+      <div class="field" style="margin:0"><label>Region code</label><input id="setRegCode" value="${esc(State.settings.regionCode||REGION_CODE)}"></div>
+    </div>
+    <button class="btn sm primary" data-act="saveSettings" style="margin-top:10px">Save</button>
+  </div>` : '';
+
   return `
   <div class="section-head"><h2>Administration</h2></div>
 
-  <div class="card pad">
-    <h3 style="font-size:15px;margin-bottom:4px">Constituency</h3>
-    <div class="grid2" style="margin-top:8px">
-      <div class="field" style="margin:0"><label>Constituency name</label><input id="setCon" value="${esc(State.settings.constituency)}"></div>
-      <div class="field" style="margin:0"><label>Region</label><input id="setReg" value="${esc(State.settings.region||'')}"></div>
-    </div>
-    <button class="btn sm primary" data-act="saveSettings" style="margin-top:10px">Save</button>
-  </div>
+  ${settingsCard}
 
   <div class="card pad" style="margin-top:14px">
-    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span><button class="btn sm primary" data-act="newUser">＋ User</button></div>
+    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span>${isRegional()?`<button class="btn sm primary" data-act="newUser">＋ User</button>`:''}</div>
     <div class="list">${users.map(u=>`
       <div class="item"><div class="av">${initials(u.fullName||u.username)}</div>
-        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${u.role==='constituency_admin'?'':'k'}">${esc(u.role.replace(/_/g,' '))}</span></div><div class="mt">@${esc(u.username)}</div></div>
-        ${u.username!=='admin'?`<button class="btn sm danger" data-act="delUser" data-id="${esc(u.username)}">✕</button>`:'<span class="tiny muted">primary</span>'}
+        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${u.role==='regional_admin'?'y':u.role==='constituency_admin'?'':'k'}">${esc(u.role.replace(/_/g,' '))}</span></div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}</div></div>
+        ${(isRegional()&&u.username!=='admin')?`<button class="btn sm danger" data-act="delUser" data-id="${esc(u.username)}">✕</button>`:(u.username==='admin'?'<span class="tiny muted">primary</span>':'')}
       </div>`).join('')}</div>
   </div>
 
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:6px">Security note</h3>
     <p class="muted small" style="margin:0">User accounts here are stored on this device only. For real multi-device authentication, scoped permissions, and audit integrity, connect the Supabase backend described in the deployment guide. Change the default admin password now.</p>
-    <div class="field" style="margin-top:10px"><label>Reset admin password</label><input id="newPw" type="password" placeholder="New password"></div>
+    <div class="field" style="margin-top:10px"><label>Reset my password</label><input id="newPw" type="password" placeholder="New password"></div>
     <button class="btn sm" data-act="resetPw">Update password</button>
   </div>`;
 }
 function wireAdmin(){
-  $('[data-act=saveSettings]').onclick=async ()=>{ State.settings={constituency:$('#setCon').value.trim()||'Keten Esikado',region:$('#setReg').value.trim()}; await Store.set('settings',State.settings); toast('Saved'); render(); };
-  $('[data-act=newUser]').onclick=newUserFlow;
+  const ss=$('[data-act=saveSettings]'); if(ss) ss.onclick=async ()=>{ State.settings={region:$('#setReg').value.trim()||REGION_NAME, regionCode:$('#setRegCode').value.trim()||REGION_CODE}; await Store.set('settings',State.settings); toast('Saved'); render(); };
+  const nu=$('[data-act=newUser]'); if(nu) nu.onclick=newUserFlow;
   document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{ const go=await confirmModal('Remove user?','This removes login access for @'+b.dataset.id+'.'); if(go){ await Store.del('user:'+b.dataset.id); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); } });
-  $('[data-act=resetPw]').onclick=async()=>{ const pw=$('#newPw').value; if(pw.length<4){ toast('Use at least 4 characters',true); return; } const u=await Store.get('user:admin'); u.password=pw; await Store.set('user:admin',u); if(State.session.username==='admin')State.session.password=pw; toast('Password updated'); };
+  $('[data-act=resetPw]').onclick=async()=>{ const pw=$('#newPw').value; if(pw.length<4){ toast('Use at least 4 characters',true); return; } const u=await Store.get('user:'+State.session.username); u.password=pw; await Store.set('user:'+State.session.username,u); State.session.password=pw; toast('Password updated'); };
 }
 async function newUserFlow(){
+  const g = await loadGraph();
+  const conOpts = g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   const body=`
     <div class="field"><label>Full name</label><input id="nuName"></div>
     <div class="field"><label>Username</label><input id="nuUser"></div>
@@ -1158,15 +1440,21 @@ async function newUserFlow(){
       <option value="ward_admin">Ward Admin</option>
       <option value="branch_admin">Branch Admin</option>
       <option value="viewer">Viewer</option>
-    </select></div>`;
+      <option value="regional_admin">Regional Admin</option>
+    </select></div>
+    <div class="field" id="nuConField"><label>Constituency</label><select id="nuCon"><option value="">Select…</option>${conOpts}</select></div>`;
   const r=await modalForm('Add user',body);
   if(!r.ok) return;
-  const name=$('#nuName').value.trim(), username=$('#nuUser').value.trim().toLowerCase(), pw=$('#nuPw').value, role=$('#nuRole').value;
+  const name=$('#nuName').value.trim(), username=$('#nuUser').value.trim().toLowerCase(), pw=$('#nuPw').value, role=$('#nuRole').value, conId=$('#nuCon').value;
   if(!username||!pw){ toast('Username and password are required',true); return; }
   if(await Store.get('user:'+username)){ toast('That username is taken',true); return; }
+  if(role!=='regional_admin' && !conId){ toast('Select a constituency for this user',true); return; }
   r.el.remove();
-  await Store.set('user:'+username,{id:username,username,password:pw,fullName:name||username,role});
-  await audit('CREATE','user',username,'Added user @'+username+' ('+role+')');
+  const con = conId? await Store.get('con:'+conId) : null;
+  const rec={id:username,username,password:pw,fullName:name||username,role};
+  if(role!=='regional_admin'){ rec.scopeConstituencyId=conId; rec.scopeConstituencyName=con?con.name:conId; }
+  await Store.set('user:'+username,rec);
+  await audit('CREATE','user',username,'Added user @'+username+' ('+role+(con?', '+con.name:'')+')');
   toast('User added'); render();
 }
 
@@ -1210,10 +1498,12 @@ function modalForm(title,bodyHtml){
    Org create / edit flows (modal)
    ============================================================ */
 async function orgFormModal(type, existing, parentId){
-  const wards = type!=='ward'? (await Data.wards()).sort((a,b)=>a.name.localeCompare(b.name)) : [];
-  const branches = type==='unit'? (await Data.branches()).sort((a,b)=>a.name.localeCompare(b.name)) : [];
+  const g = await loadGraph();
+  const wards = (type==='branch') ? g.wards.filter(w=>inScope(w.constituencyId)).sort((a,b)=>a.name.localeCompare(b.name)) : [];
+  const branches = (type==='unit') ? g.branches.filter(b=>inScope(g.conOf({level:'branch',branchId:b.id}))).sort((a,b)=>a.name.localeCompare(b.name)) : [];
   let extra='';
-  if(type==='branch'){ extra=`<div class="field"><label>Parent ward <span class="req">*</span></label><select id="of_parent">${wards.map(w=>`<option value="${w.id}" ${parentId===w.id||(existing&&existing.wardId===w.id)?'selected':''}>${esc(w.name)}</option>`).join('')}</select></div>`; }
+  if(type==='ward'){ const conId = parentId || (existing&&existing.constituencyId); const c=g.cMap[conId]; extra=`<div class="field"><label>Constituency</label><input value="${esc(c?c.name:conId||'')}" readonly style="background:var(--green-soft)"></div>`; }
+  if(type==='branch'){ extra=`<div class="field"><label>Parent ward <span class="req">*</span></label><select id="of_parent">${wards.map(w=>`<option value="${w.id}" ${parentId===w.id||(existing&&existing.wardId===w.id)?'selected':''}>${esc(w.name)} — ${esc((g.cMap[w.constituencyId]||{}).code||'')}</option>`).join('')}</select></div>`; }
   if(type==='unit'){ extra=`<div class="field"><label>Parent branch <span class="req">*</span></label><select id="of_parent">${branches.map(b=>`<option value="${b.id}" ${parentId===b.id||(existing&&existing.branchId===b.id)?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`; }
   const codeLabel = type==='unit'?'Polling station code':'Code (optional)';
   const codeId = type==='unit'?'of_station':'of_code';
@@ -1228,7 +1518,7 @@ async function orgFormModal(type, existing, parentId){
   const rec = Object.assign({}, existing||{}, {id, type, name, updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO()});
   if(type==='branch'){ rec.wardId=$('#of_parent').value; rec.code=$('#of_code').value.trim(); }
   if(type==='unit'){ rec.branchId=$('#of_parent').value; rec.stationCode=$('#of_station').value.trim(); }
-  if(type==='ward'){ rec.code=$('#of_code').value.trim(); }
+  if(type==='ward'){ rec.constituencyId = parentId || (existing&&existing.constituencyId); rec.code=$('#of_code').value.trim(); }
   r.el.remove();
   await Store.set(type+':'+id, rec);
   await audit(existing?'UPDATE':'CREATE',type,id,(existing?'Updated ':'Created ')+LVS[type]+' '+name);
@@ -1247,6 +1537,7 @@ async function onAction(e){
   const el=e.currentTarget; const act=el.dataset.act; e.stopPropagation();
   if(act==='logout') return logout();
   if(act==='newWard') return orgFormModal('ward',null,null);
+  if(act==='newWardIn') return orgFormModal('ward',null,el.dataset.con);
   if(act==='newChild') return orgFormModal(el.dataset.level,null,el.dataset.parent);
   if(act==='editOrg'){ const n=await Store.get(el.dataset.level+':'+el.dataset.id); return orgFormModal(el.dataset.level,n,null); }
   if(act==='delOrg'){ const go=await confirmModal('Delete '+LVS[el.dataset.level]+'?','This also deletes everything beneath it (branches, units, and their executives).'); if(go){ await cascadeDelete(el.dataset.level,el.dataset.id); toast('Deleted'); history.back(); setTimeout(render,50);} return; }

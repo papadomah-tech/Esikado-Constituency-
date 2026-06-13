@@ -1,7 +1,7 @@
 {
-  "name": "Keten Esikado NDC Executive Registry",
+  "name": "Western Region NDC Executive Registry",
   "short_name": "NDC Registry",
-  "description": "Three-tier party executive registry for the Keten Esikado Constituency NDC.",
+  "description": "Five-tier party executive registry for the Western Region NDC, with constituency-level access.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
