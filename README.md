@@ -29,6 +29,7 @@ Go to **Admin → Reset admin password** and change it immediately.
 - Dashboard: counts, gender distribution, coverage bars, recent activity.
 - Search with level, gender, and sort filters.
 - Reports: gender by level, coverage gaps, totals, CSV export.
+- Photo album report: passport photos in a grid grouped by ward, filterable by ward and level, with a print / save-as-PDF layout for A4.
 - Data tools: CSV export, CSV import (wards/branches/units matched by name and created if missing), full backup and restore as a single JSON file.
 - Role-based accounts (Constituency Admin, Ward Admin, Branch Admin, Viewer).
 - Audit trail of every create, update, delete, import, export, and login.

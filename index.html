@@ -181,6 +181,40 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 .login-brand .t2{font-size:21px;font-weight:800;color:var(--green-dark);margin-top:3px}
 .login-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:16px;line-height:1.5}
 .fab{position:fixed;right:max(16px,calc(50% - 380px + 16px));bottom:22px;z-index:25;background:var(--red);color:#fff;border:0;height:54px;padding:0 20px;border-radius:999px;font-weight:800;font-size:15px;box-shadow:0 10px 26px rgba(206,17,38,.4);display:inline-flex;align-items:center;gap:8px}
+
+/* ---------- Photo album ---------- */
+.album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
+.album-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;cursor:pointer}
+.album-card:hover{border-color:var(--line-strong)}
+.album-photo{aspect-ratio:3/4;background:var(--green-soft);display:grid;place-items:center;overflow:hidden}
+.album-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.album-photo .ph-init{font-size:32px;font-weight:800;color:var(--green)}
+.album-meta{padding:8px 10px 10px}
+.album-meta .reg{font-size:10.5px;font-weight:800;color:var(--green-dark);letter-spacing:.05em;font-variant-numeric:tabular-nums}
+.album-meta .nm{font-weight:700;font-size:13.5px;line-height:1.2;margin:2px 0}
+.album-meta .pos{font-size:12px;color:var(--ink)}
+.album-meta .loc{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.3}
+.album-ward-head{display:flex;align-items:baseline;gap:8px;margin:18px 2px 11px;font-weight:800;font-size:15px;border-bottom:2px solid var(--green-soft);padding-bottom:6px}
+.album-ward-head .ct{font-size:12px;font-weight:700;color:var(--muted)}
+.print-only{display:none}
+.album-print-head{text-align:center}
+.album-print-head img{width:54px;height:auto;margin:0 auto 6px;display:block}
+.album-print-head .pt{font-size:18px;font-weight:800;color:var(--green-dark)}
+.album-print-head .ps{font-size:12px;color:var(--muted);margin-top:2px}
+
+@media print{
+  @page{margin:12mm}
+  html,body,#app{background:#fff !important}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .topbar,.tabs,.fab,.no-print{display:none !important}
+  .content{padding:0 !important}
+  #app{max-width:none}
+  .print-only{display:block !important}
+  .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
+  .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important;cursor:auto}
+  .album-ward-head{break-after:avoid;page-break-after:avoid}
+  .card{box-shadow:none !important}
+}
 </style>
 </head>
 <body>
@@ -399,6 +433,7 @@ async function _render(){
     }
     else if(route==='search'){ c.innerHTML = await viewSearch(q); wireSearch(); }
     else if(route==='reports'){ c.innerHTML = await viewReports(); }
+    else if(route==='album'){ c.innerHTML = await viewAlbum(q); wireAlbum(); }
     else if(route==='data'){ c.innerHTML = await viewData(); wireData(); }
     else if(route==='admin'){ c.innerHTML = await viewAdmin(); wireAdmin(); }
     else if(route==='audit'){ c.innerHTML = await viewAudit(); }
@@ -435,6 +470,7 @@ function shell(active){
       ${tab('wards',active,'#/wards','Registry')}
       ${tab('search',active,'#/search','Search')}
       ${tab('reports',active,'#/reports','Reports')}
+      ${tab('album',active,'#/album','Album')}
       ${tab('data',active,'#/data','Data')}
       ${tab('audit',active,'#/audit','Activity')}
       ${isAdmin?tab('admin',active,'#/admin','Admin'):''}
@@ -839,7 +875,7 @@ async function viewReports(){
   const branchNoExec = branches.filter(b=>!execs.some(e=>e.level==='branch'&&e.branchId===b.id));
 
   return `
-  <div class="section-head"><h2>Reports & analytics</h2><span class="spacer"></span><button class="btn sm" data-act="exportReport">⬇ Export CSV</button></div>
+  <div class="section-head"><h2>Reports & analytics</h2><span class="spacer"></span><button class="btn sm" data-link="#/album">📸 Photo album</button><button class="btn sm" data-act="exportReport">⬇ Export CSV</button></div>
 
   <div class="card pad">
     <h3 style="font-size:15px;margin-bottom:6px">Gender distribution by level</h3>
@@ -865,6 +901,97 @@ async function viewReports(){
       <dt>Wards / Branches / Units</dt><dd>${wards.length} / ${branches.length} / ${units.length}</dd>
     </div>
   </div>`;
+}
+
+/* ============================================================
+   PHOTO ALBUM
+   ============================================================ */
+async function viewAlbum(q){
+  const [wards,branches,units,execs]=await Promise.all([Data.wards(),Data.branches(),Data.units(),Data.execs()]);
+  const wMap={}, bMap={}, uMap={};
+  wards.forEach(w=>wMap[w.id]=w); branches.forEach(b=>bMap[b.id]=b); units.forEach(u=>uMap[u.id]=u);
+  // enrich each exec with its ward grouping and a location label
+  const enriched = execs.map(e=>{
+    let wardId=null, wardName='Unassigned', loc='';
+    if(e.level==='ward'){ const w=wMap[e.wardId]; wardId=e.wardId; wardName=w?w.name:'Unassigned'; loc=(w?w.name:'')+' (Ward)'; }
+    else if(e.level==='branch'){ const b=bMap[e.branchId]; const w=b?wMap[b.wardId]:null; wardId=b?b.wardId:null; wardName=w?w.name:'Unassigned'; loc=(b?b.name:'—')+' (Branch)'; }
+    else { const u=uMap[e.unitId]; const b=u?bMap[u.branchId]:null; const w=b?wMap[b.wardId]:null; wardId=b?b.wardId:null; wardName=w?w.name:'Unassigned'; loc=(u?u.name:'—')+(b?' • '+b.name:'')+' (Unit)'; }
+    return Object.assign({}, e, {_wardId:wardId, _wardName:wardName, _loc:loc});
+  });
+  State._album = {execs:enriched, wards};
+
+  const wardOpts = `<option value="">All wards</option>`+wards.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(w=>`<option value="${w.id}" ${q.ward===w.id?'selected':''}>${esc(w.name)}</option>`).join('');
+  const levelOpts = `<option value="">All levels</option>`+['ward','branch','unit'].map(l=>`<option value="${l}" ${q.level===l?'selected':''}>${LVS[l]}</option>`).join('');
+
+  return `
+  <div class="album-print-head print-only">
+    <img src="${LOGO_FULL}" alt="NDC">
+    <div class="pt">${esc(State.settings.constituency)} Constituency</div>
+    <div class="ps" id="albumPrintMeta">Executive Photo Album</div>
+  </div>
+
+  <div class="section-head no-print"><h2>Photo album</h2><span class="sub">Passport photos by ward</span><span class="spacer"></span>
+    <button class="btn sm primary" data-act="printAlbum">🖨️ Print / Save PDF</button>
+  </div>
+  <div class="filters no-print">
+    <select id="albWard">${wardOpts}</select>
+    <select id="albLevel">${levelOpts}</select>
+    <select id="albSort"><option value="reg">Sort: Reg. number</option><option value="name">Sort: Name</option></select>
+  </div>
+  <div id="albumBody"></div>`;
+}
+
+function albumRenderBody(){
+  const data = State._album; if(!data) return;
+  const wardF = $('#albWard') ? $('#albWard').value : '';
+  const levelF = $('#albLevel') ? $('#albLevel').value : '';
+  const sortF = $('#albSort') ? $('#albSort').value : 'reg';
+  let list = data.execs.filter(e=>{
+    if(wardF && e._wardId!==wardF) return false;
+    if(levelF && e.level!==levelF) return false;
+    return true;
+  });
+  const sorter = sortF==='name'
+    ? (a,b)=> (a.fullName||'').localeCompare(b.fullName||'')
+    : (a,b)=> String(a.regNo||'').localeCompare(String(b.regNo||''));
+  list.sort(sorter);
+
+  // group by ward
+  const groups={};
+  list.forEach(e=>{ (groups[e._wardName]=groups[e._wardName]||[]).push(e); });
+  const wardNames = Object.keys(groups).sort((a,b)=>a==='Unassigned'?1:b==='Unassigned'?-1:a.localeCompare(b));
+
+  const meta = $('#albumPrintMeta');
+  if(meta){ const scope = wardF ? (data.wards.find(w=>w.id===wardF)||{}).name : 'All wards'; meta.textContent = `Executive Photo Album • ${scope}${levelF?' • '+LVS[levelF]:''} • ${list.length} executive(s) • ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}`; }
+
+  const body = $('#albumBody'); if(!body) return;
+  if(!list.length){ body.innerHTML = `<div class="empty"><div class="e-ico">📸</div><h3>No photos to show</h3><p>No executives match these filters yet.</p></div>`; return; }
+
+  const card = (e)=>`
+    <div class="album-card" data-link="#/exec/${e.id}">
+      <div class="album-photo">${e.photo?`<img src="${e.photo}" alt="${esc(e.fullName)}">`:`<span class="ph-init">${initials(e.fullName)}</span>`}</div>
+      <div class="album-meta">
+        <div class="reg">${esc(e.regNo||'')}</div>
+        <div class="nm">${esc(e.fullName)}</div>
+        <div class="pos">${esc(e.position||'—')}</div>
+        <div class="loc">${esc(e._loc)}</div>
+      </div>
+    </div>`;
+
+  body.innerHTML = `<div class="small muted no-print" style="margin-bottom:6px">${list.length} executive(s)</div>` +
+    wardNames.map(wn=>`
+      <div class="album-ward-head">${esc(wn)} <span class="ct">${groups[wn].length}</span></div>
+      <div class="album-grid">${groups[wn].map(card).join('')}</div>
+    `).join('');
+
+  // make cards clickable on screen
+  body.querySelectorAll('[data-link]').forEach(el=>{ el.onclick=()=>{ location.hash=el.dataset.link; render(); }; });
+}
+
+function wireAlbum(){
+  albumRenderBody();
+  ['albWard','albLevel','albSort'].forEach(id=>{ const el=$('#'+id); if(el) el.onchange=albumRenderBody; });
+  const pb=$('[data-act=printAlbum]'); if(pb) pb.onclick=()=>window.print();
 }
 
 /* ============================================================
