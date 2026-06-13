@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0A6B3B" />
-<title>Keten Esikado NDC Registry</title>
+<title>Ghana NDC Executive Registry</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icon-192.png" />
 <style>
@@ -223,7 +223,7 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 
 <script>
 /* ============================================================
-   Keten Esikado Constituency NDC Party Management System
+   Ghana NDC Party Executive Registry - National (16 Regions, 276 Constituencies)
    Single-file offline-first PWA.
    Data layer abstracts over window.storage (in-app preview) and
    IndexedDB (when deployed), so the UI never changes if you later
@@ -307,49 +307,60 @@ const DEFAULT_POSITIONS = [
   {title:'Polling Station Executive', levels:['unit']},
 ];
 
-/* ---------------- Constituencies (Western Region, fixed set of 17) ---------------- */
-const REGION_NAME = 'Western Region';
-const REGION_CODE = 'WR';
-const CONSTITUENCIES = [
-  {code:'AHW', name:'Ahanta West'},
-  {code:'AMC', name:'Amenfi Central'},
-  {code:'AME', name:'Amenfi East'},
-  {code:'AMW', name:'Amenfi West'},
-  {code:'EFF', name:'Effia'},
-  {code:'ELL', name:'Ellembelle'},
-  {code:'ESK', name:'Essikado-Ketan'},
-  {code:'EVA', name:'Evalue-Ajomoro (Evalue Gwira)'},
-  {code:'JOM', name:'Jomoro'},
-  {code:'KWE', name:'Kwesimintsim'},
-  {code:'MPO', name:'Mpohor'},
-  {code:'PHV', name:'Prestea-Huni Valley'},
-  {code:'SEK', name:'Sekondi'},
-  {code:'SHA', name:'Shama'},
-  {code:'TAK', name:'Takoradi'},
-  {code:'TKN', name:'Tarkwa-Nsuaem'},
-  {code:'WSE', name:'Wassa East'},
-];
+/* ---------------- Regions & constituencies (Ghana, fixed national structure) ---------------- */
+const NATION_NAME = 'Ghana';
+// 16 regions, each with its constituencies as [code, name] pairs.
+const REGIONS =   [
+    {code:"WR",name:"Western Region",constituencies:[["AHW","Ahanta West"],["AMC","Amenfi Central"],["AME","Amenfi East"],["AMW","Amenfi West"],["EFF","Effia"],["ELL","Ellembelle"],["ESK","Essikado-Ketan"],["EVA","Evalue-Gwira"],["JOM","Jomoro"],["KWE","Kwesimintsim"],["MPO","Mpohor"],["PHV","Prestea-Huni Valley"],["SEK","Sekondi"],["SHA","Shama"],["TAK","Takoradi"],["TKN","Tarkwa-Nsuaem"],["WSE","Wassa East"]]},
+    {code:"AHF",name:"Ahafo Region",constituencies:[["ASU","Asunafo North"],["AS","Asunafo South"],["AN","Asutifi North"],["ASUT","Asutifi South"],["TAN","Tano North"],["TS","Tano South"]]},
+    {code:"ASH",name:"Ashanti Region",constituencies:[["ADA","Adansi-Asokwa"],["ADAN","Adansi North"],["ADS","Adansi South"],["AFI","Afigya-Kwabre North"],["AKS","Afigya-Kwabre South"],["AHA","Ahafo Ano North"],["AASE","Ahafo Ano South East"],["AASW","Ahafo Ano South West"],["AKR","Akrofuom"],["ASA","Asante-Akim Central"],["AAN","Asante-Akim North"],["AAS","Asante-Akim South"],["ASO","Asokwa"],["ATW","Atwima-Kwanwoma"],["AM","Atwima-Mponua"],["ANN","Atwima-Nwabiagya North"],["ANS","Atwima-Nwabiagya South"],["BEK","Bekwai"],["BOS","Bosome-Freho"],["BOSO","Bosomtwe"],["EA","Effiduase-Asokore"],["EJI","Ejisu"],["EJU","Ejura-Sekyedumase"],["FOM","Fomena"],["JUA","Juaben"],["KUM","Kumawu"],["KWA","Kwabre East"],["KWAD","Kwadaso"],["MAM","Mampong"],["MAN","Manhyia North"],["MS","Manhyia South"],["NHY","Nhyiaeso"],["NSU","Nsuta-Kwamang-Beposo"],["OBU","Obuasi East"],["OW","Obuasi West"],["ODO","Odotobri"],["OFF","Offinso North"],["OS","Offinso South"],["OFO","Oforikrom"],["OLD","Old Tafo"],["SAP","Sekyere Afram Plains"],["SC","Sekyere Central"],["SE","Sekyere East"],["SK","Sekyere Kumawu"],["SS","Sekyere South"],["SUA","Suame"],["SUB","Subin"]]},
+    {code:"BNO",name:"Bono Region",constituencies:[["BAN","Banda"],["BER","Berekum East"],["BW","Berekum West"],["DOR","Dormaa Central"],["DE","Dormaa East"],["DW","Dormaa West"],["JAM","Jaman North"],["JS","Jaman South"],["SUN","Sunyani East"],["SW","Sunyani West"],["TAI","Tain"],["WEN","Wenchi"]]},
+    {code:"BOE",name:"Bono East Region",constituencies:[["ATE","Atebubu-Amantin"],["KIN","Kintampo North"],["KS","Kintampo South"],["NKO","Nkoranza North"],["NS","Nkoranza South"],["PRU","Pru East"],["PW","Pru West"],["SEN","Sene East"],["SENE","Sene West"],["TEC","Techiman North"],["TECH","Techiman South"]]},
+    {code:"CEN",name:"Central Region",constituencies:[["ABU","Abura-Asebu-Kwamankese"],["AGO","Agona East"],["AW","Agona West"],["AJU","Ajumako-Enyan-Essiam"],["ASI","Asikuma-Odoben-Brakwa"],["ASS","Assin Central"],["ASSI","Assin North"],["AS2","Assin South"],["AWU","Awutu-Senya East"],["ASW","Awutu-Senya West"],["CAP","Cape Coast North"],["CCS","Cape Coast South"],["EFFU","Effutu"],["EKU","Ekumfi"],["GOM","Gomoa Central"],["GE","Gomoa East"],["GW","Gomoa West"],["HEM","Hemang Lower Denkyira"],["KOM","Komenda-Edina-Eguafo-Abirem"],["MFA","Mfantseman"],["TWI","Twifo-Atii Morkwaa"],["UPP","Upper Denkyira East"],["UDW","Upper Denkyira West"]]},
+    {code:"EAS",name:"Eastern Region",constituencies:[["ABE","Abetifi"],["ABI","Abirem"],["ABUA","Abuakwa North"],["ABS","Abuakwa South"],["ACH","Achiase"],["AFR","Afram Plains North"],["APS","Afram Plains South"],["AKI","Akim Oda"],["AKIM","Akim Swedru"],["AKRO","Akropong"],["AKW","Akwatia"],["ASE","Asene-Akroso-Manso"],["ASUO","Asuogyaman"],["ATI","Atiwa East"],["ATIW","Atiwa West"],["AYE","Ayensuano"],["FAN","Fanteakwa North"],["FS","Fanteakwa South"],["KAD","Kade"],["LOW","Lower Manya"],["LWA","Lower West Akim"],["MPR","Mpraeso"],["NEW","New Juaben North"],["NJS","New Juaben South"],["NKA","Nkawkaw"],["NSA","Nsawam-Adoagyiri"],["OA","Ofoase-Ayirebi"],["OKE","Okere"],["SUH","Suhum"],["UM","Upper Manya"],["UWA","Upper West Akim"],["YIL","Yilo Krobo"]]},
+    {code:"GAR",name:"Greater Accra Region",constituencies:[["ABL","Ablekuma Central"],["ABLE","Ablekuma North"],["AB2","Ablekuma South"],["ABW","Ablekuma West"],["AD2","Ada"],["ADE","Adenta"],["ASHA","Ashaiman"],["AYA","Ayawaso Central"],["AE","Ayawaso East"],["AYAW","Ayawaso North"],["AYW","Ayawaso West"],["BOR","Bortianor-Ngleshie-Amanfro"],["DAD","Dade Kotopon"],["DOM","Dome-Kwabenya"],["KOR","Korle Klottey"],["KPO","Kpone-Katamanso"],["KRO","Krowor"],["LED","Ledzokuku"],["MAD","Madina"],["NIN","Ningo-Prampram"],["ODOD","Odododiodioo"],["OKA","Okaikwei Central"],["ON","Okaikwei North"],["OKAI","Okaikwei South"],["SEG","Sege"],["SO","Shai-Osudoku"],["TEM","Tema Central"],["TE","Tema East"],["TW","Tema West"],["TRO","Trobu"],["WEI","Weija-Gbawe"]]},
+    {code:"NEA",name:"North East Region",constituencies:[["BUN","Bunkpurugu"],["CHE","Chereponi"],["NAL","Nalerigu-Gambaga"],["WAL","Walewale"],["YAG","Yagaba-Kubori"],["YUN","Yunyoo"]]},
+    {code:"NTH",name:"Northern Region",constituencies:[["BIM","Bimbilla"],["BOL","Bole"],["BY","Bunkpurugu-Yunyoo"],["CHER","Chereponi"],["DAM","Damango"],["DAB","Daboya-Mankarigu"],["GUS","Gushiegu"],["KAR","Karaga"],["KPA","Kpandai"],["KUMB","Kumbungu"],["MIO","Mion"],["NAN","Nanton"],["SAB","Saboba"],["SAG","Sagnarigu"],["SAVE","Savelugu"],["TAM","Tamale Central"],["TN","Tamale North"],["TAMA","Tamale South"],["TAT","Tatale-Sanguli"],["TOL","Tolon"],["WUL","Wulensi"],["YEN","Yendi"],["ZAB","Zabzugu"]]},
+    {code:"OTI",name:"Oti Region",constituencies:[["AKA","Akan"],["BIA","Biakoye"],["BUE","Buem"],["KRA","Krachi East"],["KN","Krachi Nchumuru"],["KW","Krachi West"],["NKW","Nkwanta North"],["NKWA","Nkwanta South"]]},
+    {code:"SAV",name:"Savannah Region",constituencies:[["BOLE","Bole"],["DM","Daboya-Mankarigu"],["DAMA","Damango"],["SAL","Salaga North"],["SALA","Salaga South"],["SAW","Sawla-Tuna-Kalba"],["YAP","Yapei-Kusawgu"]]},
+    {code:"UEA",name:"Upper East Region",constituencies:[["BAW","Bawku Central"],["BAWK","Bawku West"],["BIN","Binduri"],["BC","Bolgatanga Central"],["BE","Bolgatanga East"],["BON","Bongo"],["BUI","Builsa North"],["BS","Builsa South"],["CHI","Chiana-Paga"],["GARU","Garu"],["NAB","Nabdam"],["NAV","Navrongo Central"],["PUS","Pusiga"],["TAL","Talensi"],["TEMP","Tempane"]]},
+    {code:"UWE",name:"Upper West Region",constituencies:[["DAF","Daffiama-Bussie-Issa"],["JIR","Jirapa"],["LAM","Lambussie"],["LAW","Lawra"],["NAD","Nadowli-Kaleo"],["NAND","Nandom"],["SIS","Sissala East"],["SISS","Sissala West"],["WAC","Wa Central"],["WAE","Wa East"],["WAW","Wa West"]]},
+    {code:"VOL",name:"Volta Region",constituencies:[["ADAK","Adaklu"],["AFA","Afadjato South"],["AZ","Agotime-Ziope"],["AKAT","Akatsi North"],["AK2","Akatsi South"],["ANL","Anlo"],["CT","Central Tongu"],["HOC","Ho Central"],["HOW","Ho West"],["HOH","Hohoe"],["KET","Keta"],["KETU","Ketu North"],["KES","Ketu South"],["KPAN","Kpando"],["NOR","North Dayi"],["NT","North Tongu"],["SOU","South Dayi"],["ST","South Tongu"]]},
+    {code:"WN",name:"Western North Region",constituencies:[["AOW","Aowin"],["AKO","Akontombra"],["BIB","Bibiani-Anhwiaso-Bekwai"],["BIAE","Bia East"],["BIAW","Bia West"],["BOD","Bodi"],["JUAB","Juaboso"],["SEF","Sefwi-Wiawso"],["SUAM","Suaman"]]}
+  ];
+const REGION_MAP = {}; REGIONS.forEach(r=> REGION_MAP[r.code]={code:r.code, name:r.name});
+// Flat list of every constituency with its region id, and a lookup map.
+const CONSTITUENCIES = [];
+const CONSTITUENCY_MAP = {};
+REGIONS.forEach(r=> r.constituencies.forEach(([code,name])=>{
+  const rec = {code, name, regionId:r.code};
+  CONSTITUENCIES.push(rec); CONSTITUENCY_MAP[code]=rec;
+}));
 
 /* ---------------- App state ---------------- */
-const State = { session:null, settings:{region:REGION_NAME, regionCode:REGION_CODE}, currentCon:null };
+const State = { session:null, settings:{}, currentCon:null };
 
 /* ---------------- Bootstrap / seed ---------------- */
 async function bootstrap(){
   const init = await Store.get('meta:init');
   if(!init){
-    // default REGIONAL admin (LOCAL ONLY — change on first login; real auth via Supabase)
-    await Store.set('user:admin', {id:'admin', username:'admin', password:'ndc2024', fullName:'Regional Administrator', role:'regional_admin', scopeConstituencyId:null});
+    // default NATIONAL admin (LOCAL ONLY — change on first login; real auth via Supabase)
+    await Store.set('user:admin', {id:'admin', username:'admin', password:'ndc2024', fullName:'National Administrator', role:'national_admin', scopeConstituencyId:null});
     await Store.set('positions', DEFAULT_POSITIONS);
     await Store.set('settings', State.settings);
-    await Store.set('meta:init', {at:nowISO(), version:'2.0'});
+    await Store.set('meta:init', {at:nowISO(), version:'3.0'});
   }
-  // seed/refresh the fixed constituency set
+  // seed/refresh the fixed national structure: 16 regions and 276 constituencies
+  for(const r of REGIONS){
+    const ex = await Store.get('reg:'+r.code);
+    if(!ex) await Store.set('reg:'+r.code, {id:r.code, code:r.code, name:r.name, type:'region'});
+  }
   for(const c of CONSTITUENCIES){
     const ex = await Store.get('con:'+c.code);
-    if(!ex) await Store.set('con:'+c.code, {id:c.code, code:c.code, name:c.name, region:REGION_NAME, type:'constituency'});
+    if(!ex) await Store.set('con:'+c.code, {id:c.code, code:c.code, name:c.name, regionId:c.regionId, type:'constituency'});
   }
-  const s = await Store.get('settings'); if(s) State.settings=Object.assign({region:REGION_NAME,regionCode:REGION_CODE}, s);
-  await migrateToRegional();
+  const s = await Store.get('settings'); if(s) State.settings=s;
+  await migrateToNational();
   const sess = await Store.get('meta:session');
   if(sess){ const u = await Store.get('user:'+sess); if(u) State.session=u; }
 }
@@ -367,30 +378,44 @@ function nextRegNo(prefix){
   _seqChain = p.catch(()=>{});
   return p;
 }
-// Resolve which numbering prefix an executive belongs to (constituency code, or WR for regional).
+// Resolve which numbering prefix an executive belongs to (constituency code, or region code for regional execs).
 async function prefixForExec(rec){
-  if(rec.level==='region') return REGION_CODE;
-  if(rec.level==='constituency') return (await Store.get('con:'+rec.constituencyId)||{}).code || rec.constituencyId;
+  if(rec.level==='region') return rec.regionId || 'NAT';
+  if(rec.level==='constituency') return rec.constituencyId;
   const conId = await constituencyIdOf(rec);
-  return (await Store.get('con:'+conId)||{}).code || conId || REGION_CODE;
+  return conId || 'NAT';
 }
-// One-time migration from the single-constituency (v1) layout to the regional layout.
-async function migrateToRegional(){
-  if(await Store.get('meta:regionalMigrated')) return;
-  // Legacy (v1) admin accounts had role constituency_admin with no constituency scope —
-  // such accounts previously had full visibility, so promote them to regional_admin.
+// One-time migration from the single-region (v2.0, Western-only) layout to the national layout.
+async function migrateToNational(){
+  if(await Store.get('meta:nationalMigrated')) return;
+  // v2.0 regional_admin accounts had full visibility within Western Region — that maps
+  // directly onto national_admin now that the whole country is in scope.
   const users = await Store.getAll('user:');
   for(const u of users){
-    if(u.role==='constituency_admin' && !u.scopeConstituencyId){ u.role='regional_admin'; await Store.set('user:'+u.username, u); }
+    if(u.role==='regional_admin'){ u.role='national_admin'; await Store.set('user:'+u.username, u); }
+    // also catch a v1 constituency_admin with no scope that was never migrated
+    if(u.role==='constituency_admin' && !u.scopeConstituencyId){ u.role='national_admin'; await Store.set('user:'+u.username, u); }
   }
-  // Discard legacy v1 settings (free-text constituency/region fields) in favour of the fixed region.
-  await Store.set('settings', {region:REGION_NAME, regionCode:REGION_CODE});
-  State.settings = {region:REGION_NAME, regionCode:REGION_CODE};
-  // Attach any pre-existing wards (and therefore their branches/units/execs) to Essikado-Ketan.
+  // Discard any legacy free-text settings — the national structure is fixed.
+  await Store.set('settings', {});
+  State.settings = {};
+  // Pre-v3 constituency records (from the Western-only v2.0 layout) have no regionId —
+  // backfill it (and sync the canonical name) from the fixed national constituency list.
+  const cons = await Data.constituencies();
+  for(const c of cons){
+    const canon = CONSTITUENCY_MAP[c.id];
+    if(canon && (c.regionId!==canon.regionId || c.name!==canon.name)){
+      c.regionId = canon.regionId; c.name = canon.name; c.type='constituency';
+      await Store.set('con:'+c.id, c);
+    }
+  }
+  // Pre-v2 data: attach any pre-existing wards with no constituencyId to Essikado-Ketan.
   const wards = await Store.getAll('ward:');
   for(const w of wards){ if(!w.constituencyId){ w.constituencyId='ESK'; await Store.set('ward:'+w.id, w); } }
-  // Backfill registration numbers for any execs missing one, per constituency prefix.
+  // Pre-v3 region-level execs had no regionId (the only region was Western) — backfill it.
   const execs = await Store.getAll('exec:');
+  for(const e of execs){ if(e.level==='region' && !e.regionId){ e.regionId='WR'; await Store.set('exec:'+e.id, e); } }
+  // Backfill registration numbers for any execs missing one, per prefix.
   const counters = {};
   // seed counters from existing numbers so we never collide
   execs.forEach(e=>{ if(e.regNo){ const m=String(e.regNo).match(/^([A-Za-z]+)-?(\d+)/); if(m){ counters[m[1]]=Math.max(counters[m[1]]||0, parseInt(m[2],10)); } } });
@@ -402,7 +427,7 @@ async function migrateToRegional(){
     await Store.set('exec:'+e.id, e);
   }
   for(const p of Object.keys(counters)){ const cur=(await Store.get('seq:'+p))||0; if(counters[p]>cur) await Store.set('seq:'+p, counters[p]); }
-  await Store.set('meta:regionalMigrated', {at:nowISO()});
+  await Store.set('meta:nationalMigrated', {at:nowISO()});
 }
 
 /* ---------------- Auth ---------------- */
@@ -417,21 +442,22 @@ async function login(username, password){
 async function logout(){ await audit('LOGOUT','user',State.session?State.session.username:'',''); State.session=null; await Store.del('meta:session'); location.hash='#/login'; render(); }
 function can(action){
   const r = State.session && State.session.role;
-  if(r==='regional_admin' || r==='constituency_admin') return true;
+  if(r==='national_admin' || r==='constituency_admin') return true;
   if(r==='viewer') return action==='view'||action==='export';
   // ward_admin / branch_admin
   return ['view','create','edit','delete','export','import'].includes(action);
 }
-function isRegional(){ return State.session && State.session.role==='regional_admin'; }
-// The constituency a non-regional user is locked to (null for regional admins).
-function userConId(){ return isRegional()? null : (State.session && State.session.scopeConstituencyId) || null; }
+function isNational(){ return State.session && State.session.role==='national_admin'; }
+// The constituency a non-national user is locked to (null for national admins).
+function userConId(){ return isNational()? null : (State.session && State.session.scopeConstituencyId) || null; }
 // Whether the current user may access a given constituency id.
 function inScope(conId){ const s=userConId(); return s===null ? true : conId===s; }
-// The constituency context currently in view (regional admins can switch; others are fixed).
-function activeConId(){ return isRegional()? State.currentCon : userConId(); }
+// The constituency context currently in view (national admins can switch; others are fixed).
+function activeConId(){ return isNational()? State.currentCon : userConId(); }
 
 /* ---------------- Data accessors ---------------- */
 const Data = {
+  regions: ()=> Store.getAll('reg:'),
   constituencies: ()=> Store.getAll('con:'),
   wards: ()=> Store.getAll('ward:'),
   branches: ()=> Store.getAll('branch:'),
@@ -501,9 +527,10 @@ async function _render(){
   try{
     if(route==='dashboard'){ c.innerHTML = await viewDashboard(); }
     else if(route==='constituencies'){ c.innerHTML = await viewConstituencies(); }
+    else if(route==='region'){ c.innerHTML = await viewRegionDetail(parts[1]); }
     else if(route==='constituency'){ c.innerHTML = await viewConstituencyDetail(parts[1]); }
-    else if(route==='regional'){ c.innerHTML = await viewRegional(); }
-    else if(route==='wards'){ location.hash = isRegional()?'#/constituencies':('#/constituency/'+(userConId()||'')); return; }
+    else if(route==='regional'){ c.innerHTML = await viewRegional(parts[1]); }
+    else if(route==='wards'){ location.hash = isNational()?'#/constituencies':('#/constituency/'+(userConId()||'')); return; }
     else if(route==='ward'){ c.innerHTML = await viewOrgDetail('ward', parts[1]); }
     else if(route==='branch'){ c.innerHTML = await viewOrgDetail('branch', parts[1]); }
     else if(route==='unit'){ c.innerHTML = await viewOrgDetail('unit', parts[1]); }
@@ -532,14 +559,14 @@ const LOGO_FULL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADXCAYAAAB
 function tab(route,active,href,label){ return `<a href="${href}" class="${route===active?'active':''}">${label}</a>`; }
 function shell(active){
   const role = State.session.role;
-  const isAdmin = role==='regional_admin' || role==='constituency_admin';
+  const isAdmin = role==='national_admin' || role==='constituency_admin';
   const scopedCon = userConId();
   // brand context line
-  let ctx = esc(State.settings.region||REGION_NAME);
+  let ctx = esc(NATION_NAME);
   if(scopedCon){ ctx = esc(State.session.scopeConstituencyName || scopedCon); }
   // registry tab target
-  const regHref = isRegional()? '#/constituencies' : ('#/constituency/'+ (scopedCon||''));
-  const regActive = ['constituencies','constituency','regional','ward','branch','unit'].includes(active)?'constituencies':active;
+  const regHref = isNational()? '#/constituencies' : ('#/constituency/'+ (scopedCon||''));
+  const regActive = ['constituencies','region','constituency','regional','ward','branch','unit'].includes(active)?'constituencies':active;
   return `
   <div class="topbar">
     <div class="topbar-in">
@@ -576,7 +603,7 @@ function viewLogin(){
     <div class="login-card">
       <div class="login-brand">
         <img class="login-logo" src="${LOGO_FULL}" alt="NDC logo" />
-        <div class="t1">${esc(REGION_NAME)}</div>
+        <div class="t1">${esc(NATION_NAME)}</div>
         <div class="t2">NDC Party Executive Registry</div>
       </div>
       <div class="field"><label>Username</label><input id="lu" autocomplete="username" placeholder="Username" /></div>
@@ -612,23 +639,23 @@ async function viewDashboard(){
     <div class="bar"><i style="width:${gd.male/tot*100}%;background:var(--green)"></i><i style="width:${gd.female/tot*100}%;background:var(--gold)"></i></div>
     <div class="legend"><span><i class="dot" style="background:var(--green)"></i>Male <b>${gd.male||0}</b></span><span><i class="dot" style="background:var(--gold)"></i>Female <b>${gd.female||0}</b></span></div>`;
 
-  const heading = scoped ? ((g.cMap[scoped]||{}).name||'Constituency') : (State.settings.region||REGION_NAME);
-  const fab = `<a class="fab" href="${isRegional()?'#/constituencies':('#/constituency/'+(scoped||''))}" title="Open registry">＋ Register</a>`;
+  const heading = scoped ? ((g.cMap[scoped]||{}).name||'Constituency') : NATION_NAME;
+  const fab = `<a class="fab" href="${isNational()?'#/constituencies':('#/constituency/'+(scoped||''))}" title="Open registry">＋ Register</a>`;
 
-  // Regional roll-up: per-constituency executive counts
+  // National roll-up: per-region executive counts
   let regionalBlock='';
   if(!scoped){
-    const conExec={}; g.execs.forEach(e=>{ const c=g.conOf(e); if(c) conExec[c]=(conExec[c]||0)+1; });
-    const cons = g.cons.slice().sort((a,b)=>(conExec[b.id]||0)-(conExec[a.id]||0)||a.name.localeCompare(b.name));
-    const maxC = Math.max(1, ...cons.map(c=>conExec[c.id]||0));
-    const conWithExecs = cons.filter(c=>conExec[c.id]).length;
+    const regExec={}; g.execs.forEach(e=>{ const r=g.regionOf(e); if(r) regExec[r]=(regExec[r]||0)+1; });
+    const regions = g.regions.slice().sort((a,b)=>(regExec[b.id]||0)-(regExec[a.id]||0)||a.name.localeCompare(b.name));
+    const maxR = Math.max(1, ...regions.map(r=>regExec[r.id]||0));
+    const regWithExecs = regions.filter(r=>regExec[r.id]).length;
     regionalBlock = `
     <div class="card pad" style="margin-top:14px">
-      <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Constituencies</h3><span class="badge k">${conWithExecs}/${cons.length} active</span></div>
-      ${cons.map(c=>`<div class="row small" data-link="#/constituency/${c.id}" style="cursor:pointer;padding:6px 0;border-bottom:1px solid var(--line);gap:10px">
-        <span style="font-weight:600;width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span>
-        <span class="bar" style="flex:1"><i style="width:${(conExec[c.id]||0)/maxC*100}%;background:var(--green)"></i></span>
-        <span class="muted tiny" style="width:28px;text-align:right">${conExec[c.id]||0}</span>
+      <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Regions</h3><span class="badge k">${regWithExecs}/${regions.length} active</span></div>
+      ${regions.map(r=>`<div class="row small" data-link="#/region/${r.id}" style="cursor:pointer;padding:6px 0;border-bottom:1px solid var(--line);gap:10px">
+        <span style="font-weight:600;width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</span>
+        <span class="bar" style="flex:1"><i style="width:${(regExec[r.id]||0)/maxR*100}%;background:var(--green)"></i></span>
+        <span class="muted tiny" style="width:28px;text-align:right">${regExec[r.id]||0}</span>
       </div>`).join('')}
     </div>`;
   }
@@ -637,9 +664,9 @@ async function viewDashboard(){
   <div class="section-head"><h2>${esc(heading)}</h2><span class="spacer"></span><span class="badge k">${esc(State.session.fullName||State.session.username)}</span></div>
   <div class="grid-stat">
     <div class="stat g"><div class="n">${execs.length}</div><div class="l">Executives</div></div>
-    <div class="stat k"><div class="n">${scoped?wards.length:g.cons.length}</div><div class="l">${scoped?'Wards':'Constituencies'}</div></div>
-    <div class="stat y"><div class="n">${branches.length}</div><div class="l">Branches</div></div>
-    <div class="stat r"><div class="n">${units.length}</div><div class="l">Units</div></div>
+    <div class="stat k"><div class="n">${scoped?wards.length:g.regions.length}</div><div class="l">${scoped?'Wards':'Regions'}</div></div>
+    <div class="stat y"><div class="n">${scoped?branches.length:g.cons.length}</div><div class="l">${scoped?'Branches':'Constituencies'}</div></div>
+    <div class="stat r"><div class="n">${scoped?units.length:wards.length}</div><div class="l">${scoped?'Units':'Wards'}</div></div>
   </div>
 
   <div class="card pad" style="margin-top:14px">
@@ -676,8 +703,9 @@ function covRow(label, n, total){
    ============================================================ */
 // Load the whole org graph once with quick lookup maps + a constituency resolver.
 async function loadGraph(){
-  const [cons,wards,branches,units,execs]=await Promise.all([Data.constituencies(),Data.wards(),Data.branches(),Data.units(),Data.execs()]);
-  const cMap={},wMap={},bMap={},uMap={};
+  const [regions,cons,wards,branches,units,execs]=await Promise.all([Data.regions(),Data.constituencies(),Data.wards(),Data.branches(),Data.units(),Data.execs()]);
+  const rMap={},cMap={},wMap={},bMap={},uMap={};
+  regions.forEach(r=>rMap[r.id]=r);
   cons.forEach(c=>cMap[c.id]=c); wards.forEach(w=>wMap[w.id]=w); branches.forEach(b=>bMap[b.id]=b); units.forEach(u=>uMap[u.id]=u);
   const conOf=(e)=>{ if(!e) return null;
     if(e.level==='region') return null;
@@ -686,23 +714,51 @@ async function loadGraph(){
     if(e.level==='branch'){ const b=bMap[e.branchId]; return b?(wMap[b.wardId]||{}).constituencyId||null:null; }
     const u=uMap[e.unitId]; const b=u?bMap[u.branchId]:null; return b?(wMap[b.wardId]||{}).constituencyId||null:null;
   };
-  return {cons,wards,branches,units,execs,cMap,wMap,bMap,uMap,conOf};
+  // region id for a given constituency id, or for a region-level exec via regionId
+  const regionOf=(e)=>{ if(!e) return null;
+    if(e.level==='region') return e.regionId||null;
+    const conId=conOf(e); return conId? (cMap[conId]||{}).regionId||null : null;
+  };
+  return {regions,cons,wards,branches,units,execs,rMap,cMap,wMap,bMap,uMap,conOf,regionOf};
 }
 function denyView(){ return emptyState('🔒','Outside your access','This record belongs to a different constituency than the one your account manages.'); }
 
 async function viewConstituencies(){
-  if(!isRegional()){ const cid=userConId(); return cid? await viewConstituencyDetail(cid) : emptyState('🚫','No constituency assigned','Ask a regional administrator to assign your account to a constituency.'); }
+  if(!isNational()){ const cid=userConId(); return cid? await viewConstituencyDetail(cid) : emptyState('🚫','No constituency assigned','Ask a national administrator to assign your account to a constituency.'); }
+  return viewRegions();
+}
+
+async function viewRegions(){
   const g = await loadGraph();
-  const cons = g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const regions = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const conCount = rid=> g.cons.filter(c=>c.regionId===rid).length;
+  const regExec = {}; g.execs.forEach(e=>{ const r=g.regionOf(e); if(r) regExec[r]=(regExec[r]||0)+1; });
+  return `
+  <div class="section-head"><h2>Registry</h2><span class="sub">${esc(NATION_NAME)} • ${g.regions.length} regions • ${g.cons.length} constituencies</span></div>
+  <div class="list">${regions.map(r=>`
+    <div class="item org" data-link="#/region/${r.id}">
+      <div class="icoo w">🗺️</div>
+      <div class="body"><div class="nm">${esc(r.name)}</div><div class="mt">${conCount(r.id)} constituenc${conCount(r.id)===1?'y':'ies'} • ${regExec[r.id]||0} executive(s) • ${esc(r.code)}</div></div>
+      <div class="chev">›</div>
+    </div>`).join('')}</div>`;
+}
+
+async function viewRegionDetail(regionId){
+  if(!isNational()) return denyView();
+  const g = await loadGraph();
+  const region = g.rMap[regionId];
+  if(!region) return emptyState('🚫','Not found','That region does not exist.');
+  const cons = g.cons.filter(c=>c.regionId===regionId).sort((a,b)=>a.name.localeCompare(b.name));
   const wardCount = cid=> g.wards.filter(w=>w.constituencyId===cid).length;
   const conExec = {}; g.execs.forEach(e=>{ const c=g.conOf(e); if(c) conExec[c]=(conExec[c]||0)+1; });
-  const regCount = g.execs.filter(e=>e.level==='region').length;
+  const regExecCount = g.execs.filter(e=>e.level==='region'&&e.regionId===regionId).length;
   return `
-  <div class="section-head"><h2>Registry</h2><span class="sub">${esc(State.settings.region||REGION_NAME)} • ${cons.length} constituencies</span></div>
+  <div class="crumb"><a href="#/constituencies">Registry</a><span class="sep">›</span><span>${esc(region.name)}</span></div>
+  <div class="section-head"><h2>${esc(region.name)}</h2><span class="sub">${cons.length} constituencies</span></div>
 
-  <div class="item org" data-link="#/regional" style="margin-bottom:12px;border-color:var(--gold)">
+  <div class="item org" data-link="#/regional/${region.id}" style="margin-bottom:12px;border-color:var(--gold)">
     <div class="icoo" style="background:#fdf3d4;color:#8a6400">⭐</div>
-    <div class="body"><div class="nm">Regional executives</div><div class="mt">${regCount} executive(s) • ${esc(REGION_CODE)} numbering</div></div>
+    <div class="body"><div class="nm">Region executives</div><div class="mt">${regExecCount} executive(s) • ${esc(region.code)} numbering</div></div>
     <div class="chev">›</div>
   </div>
 
@@ -720,17 +776,21 @@ async function viewConstituencyDetail(id){
   if(!inScope(id)) return denyView();
   const positions = await Data.positions();
   const g = await loadGraph();
+  const region = g.rMap[con.regionId];
   const ownExecs = g.execs.filter(e=> e.level==='constituency' && e.constituencyId===id);
   const slate = posForLevel(positions, 'constituency');
   const filled = new Set(ownExecs.map(e=>e.position));
   const wards = g.wards.filter(w=>w.constituencyId===id).sort((a,b)=>a.name.localeCompare(b.name));
   const wardExec = wid=> g.execs.filter(e=>e.level==='ward'&&e.wardId===wid).length;
   const wardBranch = wid=> g.branches.filter(b=>b.wardId===wid).length;
-  const rootHref = isRegional()?'#/constituencies':'#/dashboard';
+
+  const crumb = isNational()
+    ? `<div class="crumb"><a href="#/constituencies">Registry</a><span class="sep">›</span><a href="#/region/${con.regionId}">${esc(region?region.name:con.regionId)}</a><span class="sep">›</span><span>${esc(con.name)}</span></div>`
+    : `<div class="crumb"><a href="#/dashboard">Registry</a><span class="sep">›</span><span>${esc(con.name)}</span></div>`;
 
   return `
-  <div class="crumb"><a href="${rootHref}">Registry</a><span class="sep">›</span><span>${esc(con.name)}</span></div>
-  <div class="section-head"><h2>${esc(con.name)}</h2><span class="badge">${esc(con.code)}</span><span class="badge k">Constituency</span></div>
+  ${crumb}
+  <div class="section-head"><h2>${esc(con.name)}</h2><span class="badge">${esc(con.code)}</span><span class="badge k">Constituency</span>${isNational()?`<span class="badge y">${esc(region?region.name:con.regionId)}</span>`:''}</div>
 
   <div class="card pad">
     <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Constituency executives</h3><span class="badge k">${ownExecs.length}</span><span class="spacer"></span>
@@ -755,23 +815,26 @@ async function viewConstituencyDetail(id){
   </div>`;
 }
 
-async function viewRegional(){
-  if(!isRegional()) return denyView();
+async function viewRegional(regionId){
+  if(!isNational()) return denyView();
+  const g = await loadGraph();
+  const region = g.rMap[regionId];
+  if(!region) return emptyState('🚫','Not found','That region does not exist.');
   const positions = await Data.positions();
-  const execs = (await Data.execs()).filter(e=>e.level==='region');
+  const execs = g.execs.filter(e=>e.level==='region'&&e.regionId===regionId);
   const slate = posForLevel(positions,'region');
   const filled = new Set(execs.map(e=>e.position));
   return `
-  <div class="crumb"><a href="#/constituencies">Registry</a><span class="sep">›</span><span>Regional executives</span></div>
-  <div class="section-head"><h2>Regional executives</h2><span class="badge y">${esc(REGION_NAME)}</span></div>
+  <div class="crumb"><a href="#/constituencies">Registry</a><span class="sep">›</span><a href="#/region/${region.id}">${esc(region.name)}</a><span class="sep">›</span><span>Region executives</span></div>
+  <div class="section-head"><h2>Region executives</h2><span class="badge y">${esc(region.name)}</span></div>
   <div class="card pad">
     <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Executives</h3><span class="badge k">${execs.length}</span><span class="spacer"></span>
-      ${can('create')?`<button class="btn primary sm" data-link="#/exec/new?level=region&parent=region">＋ Add</button>`:''}
+      ${can('create')?`<button class="btn primary sm" data-link="#/exec/new?level=region&parent=${region.id}">＋ Add</button>`:''}
     </div>
     <div class="small muted" style="margin-bottom:8px">Positions filled: ${filled.size}/${slate.length}
       <div class="pip-row">${slate.map(p=>`<span class="pip ${filled.has(p)?'on':''}" title="${esc(p)}${filled.has(p)?' — filled':' — vacant'}"></span>`).join('')}</div>
     </div>
-    ${execs.length? `<div class="list" style="margin-top:6px">`+execs.map(execItem).join('')+`</div>` : '<p class="muted small" style="margin:6px 0 0">No regional executives registered yet.</p>'}
+    ${execs.length? `<div class="list" style="margin-top:6px">`+execs.map(execItem).join('')+`</div>` : '<p class="muted small" style="margin:6px 0 0">No region executives registered yet.</p>'}
   </div>`;
 }
 
@@ -832,7 +895,7 @@ function execItem(e){
   </div>`;
 }
 async function buildCrumb(level,node){
-  const rootHref = isRegional()?'#/constituencies':('#/constituency/'+(userConId()||''));
+  const rootHref = isNational()?'#/constituencies':('#/constituency/'+(userConId()||''));
   const parts=[`<a href="${rootHref}">Registry</a>`];
   const conId = await constituencyIdOf(node);
   if(conId){ const c=await Store.get('con:'+conId); parts.push(`<span class="sep">›</span><a href="#/constituency/${conId}">${esc(c?c.name:conId)}</a>`); }
@@ -856,14 +919,25 @@ async function viewExecForm(execId, q){
   const g = await loadGraph();
   let parentField='';
   if(level==='region'){
-    parentField = `<div class="field"><label>Scope</label><input value="${esc(REGION_NAME)} — regional executive" readonly style="background:var(--green-soft);color:var(--green-dark);font-weight:600"></div>`;
+    const regions = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    parentField = selectField('regionId','Region',regions.map(r=>({v:r.id,t:r.name})),parentId,true);
   } else if(level==='constituency'){
-    let cons = g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name));
-    if(!isRegional()) cons = cons.filter(c=>inScope(c.id));
-    parentField = selectField('constituencyId','Constituency',cons.map(c=>({v:c.id,t:c.name})),parentId,true);
+    let cons = g.cons.slice();
+    if(!isNational()) cons = cons.filter(c=>inScope(c.id));
+    const groups = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({
+      label:r.name,
+      opts:cons.filter(c=>c.regionId===r.id).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>({v:c.id,t:c.name+' ('+c.code+')'}))
+    })).filter(grp=>grp.opts.length);
+    parentField = groupedSelectField('constituencyId','Constituency',groups,parentId,true);
   } else if(level==='ward'){
-    const wards = g.wards.filter(w=>inScope(w.constituencyId)).sort((a,b)=>a.name.localeCompare(b.name));
-    parentField = selectField('wardId','Ward / Electoral Area',wards.map(w=>({v:w.id,t:w.name+' — '+((g.cMap[w.constituencyId]||{}).code||'')})),parentId,true);
+    const wards = g.wards.filter(w=>inScope(w.constituencyId));
+    const groups = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(r=>{
+      const consInR = g.cons.filter(c=>c.regionId===r.id).map(c=>c.id);
+      return { label:r.name, opts: wards.filter(w=>consInR.includes(w.constituencyId)).sort((a,b)=>a.name.localeCompare(b.name)).map(w=>({v:w.id,t:w.name+' — '+((g.cMap[w.constituencyId]||{}).code||'')})) };
+    }).filter(grp=>grp.opts.length);
+    parentField = isNational()
+      ? groupedSelectField('wardId','Ward / Electoral Area',groups,parentId,true)
+      : selectField('wardId','Ward / Electoral Area',wards.sort((a,b)=>a.name.localeCompare(b.name)).map(w=>({v:w.id,t:w.name})),parentId,true);
   } else if(level==='branch'){
     const branches = g.branches.filter(b=>inScope(g.conOf({level:'branch',branchId:b.id}))).sort((a,b)=>a.name.localeCompare(b.name));
     parentField = selectField('branchId','Branch',branches.map(b=>({v:b.id,t:b.name})),parentId,true);
@@ -918,6 +992,11 @@ async function viewExecForm(execId, q){
 function textField(id,label,val,req,type='text'){ return `<div class="field" data-f="${id}"><label>${label}${req?' <span class="req">*</span>':''}</label><input id="f_${id}" type="${type}" value="${val?esc(val):''}"><div class="err hidden">Required.</div></div>`; }
 function textareaField(id,label,val){ return `<div class="field" data-f="${id}"><label>${label}</label><textarea id="f_${id}">${val?esc(val):''}</textarea></div>`; }
 function selectField(id,label,opts,val,req,allowFree){ return `<div class="field" data-f="${id}"><label>${label}${req?' <span class="req">*</span>':''}</label><select id="f_${id}"><option value="">Select…</option>${opts.map(o=>`<option value="${esc(o.v)}" ${String(val)===String(o.v)?'selected':''}>${esc(o.t)}</option>`).join('')}${allowFree&&val&&!opts.some(o=>o.v===val)?`<option value="${esc(val)}" selected>${esc(val)}</option>`:''}</select><div class="err hidden">Required.</div></div>`; }
+// groups: [{label, opts:[{v,t}]}]
+function groupedSelectField(id,label,groups,val,req){
+  const body = groups.map(g=>`<optgroup label="${esc(g.label)}">${g.opts.map(o=>`<option value="${esc(o.v)}" ${String(val)===String(o.v)?'selected':''}>${esc(o.t)}</option>`).join('')}</optgroup>`).join('');
+  return `<div class="field" data-f="${id}"><label>${label}${req?' <span class="req">*</span>':''}</label><select id="f_${id}"><option value="">Select…</option>${body}</select><div class="err hidden">Required.</div></div>`;
+}
 
 function wireExecForm(){
   const form=$('#execForm'); if(!form) return;
@@ -942,8 +1021,8 @@ async function saveExec(){
     photo, level, status:'active'
   };
   // parent key depends on level (region has no parent)
-  const parentKey = level==='region' ? null : (level==='constituency' ? 'constituencyId' : level+'Id');
-  if(parentKey) rec[parentKey]=fieldVal(parentKey);
+  const parentKey = level==='region' ? 'regionId' : (level==='constituency' ? 'constituencyId' : level+'Id');
+  rec[parentKey]=fieldVal(parentKey);
   // validation
   let ok=true;
   const required = ['fullName','position','gender','phone'].concat(parentKey?[parentKey]:[]);
@@ -978,7 +1057,8 @@ async function viewExecProfile(id){
   const conId = await constituencyIdOf(e);
   if(!inScope(conId)) return denyView();
   let parentName='—', parentLink='#/constituencies';
-  if(e.level==='region'){ parentName=REGION_NAME; parentLink='#/regional'; }
+  let regionRec=null;
+  if(e.level==='region'){ regionRec = await Store.get('reg:'+e.regionId); parentName=regionRec?regionRec.name:e.regionId; parentLink='#/regional/'+e.regionId; }
   else if(e.level==='constituency'){ const c=await Store.get('con:'+e.constituencyId); parentName=c?c.name:'—'; parentLink='#/constituency/'+e.constituencyId; }
   else if(e.level==='ward'){ const w=await Store.get('ward:'+e.wardId); parentName=w?w.name:'—'; parentLink='#/ward/'+e.wardId; }
   else if(e.level==='branch'){ const b=await Store.get('branch:'+e.branchId); parentName=b?b.name:'—'; parentLink='#/branch/'+e.branchId; }
@@ -1000,7 +1080,7 @@ async function viewExecProfile(id){
     </div>
     <dl class="kv" style="margin-top:16px">
       <dt>Registration no.</dt><dd><b>${esc(e.regNo||'—')}</b></dd>
-      <dt>Constituency</dt><dd>${con?`<a href="#/constituency/${conId}">${esc(con.name)}</a>`:(e.level==='region'?esc(REGION_NAME):'—')}</dd>
+      <dt>${e.level==='region'?'Region':'Constituency'}</dt><dd>${con?`<a href="#/constituency/${conId}">${esc(con.name)}</a>`:(regionRec?`<a href="#/region/${regionRec.id}">${esc(regionRec.name)}</a>`:'—')}</dd>
       <dt>Phone</dt><dd>${esc(e.phone||'—')}</dd>
       <dt>Email</dt><dd>${esc(e.email||'—')}</dd>
       <dt>Gender</dt><dd>${esc((e.gender||'—').replace(/^./,c=>c.toUpperCase()))}</dd>
@@ -1024,34 +1104,42 @@ async function viewExecProfile(id){
 async function viewSearch(q){
   const g = await loadGraph();
   const scoped = userConId();
-  // annotate each exec with its constituency and a location label, then scope
+  // annotate each exec with its region, constituency, and a location label, then scope
   const execs = g.execs.filter(e=> scoped? g.conOf(e)===scoped : true).map(e=>{
     const cid=g.conOf(e); const con=cid?g.cMap[cid]:null;
+    const rid=g.regionOf(e); const reg=rid?g.rMap[rid]:null;
     let loc='';
-    if(e.level==='region') loc=REGION_NAME;
+    if(e.level==='region') loc=(reg?reg.name:'')+' (Region)';
     else if(e.level==='constituency') loc=(con?con.name:'')+' (Constituency)';
     else if(e.level==='ward') loc=((g.wMap[e.wardId]||{}).name||'')+' (Ward)';
     else if(e.level==='branch') loc=((g.bMap[e.branchId]||{}).name||'')+' (Branch)';
     else loc=((g.uMap[e.unitId]||{}).name||'')+' (Unit)';
-    return Object.assign({}, e, {_con:con?con.name:(e.level==='region'?REGION_NAME:''), _conId:cid, _loc:loc});
+    return Object.assign({}, e, {_con:con?con.name:'', _conId:cid, _regionId:rid, _region:reg?reg.name:'', _loc:loc});
   });
   State._searchCache=execs;
-  const conFilter = (isRegional()) ? `<select id="fcon"><option value="">All constituencies</option>${g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>` : '';
+  let regFilter='', conFilter='';
+  if(isNational()){
+    const regions = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    regFilter = `<select id="freg"><option value="">All regions</option>${regions.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('')}</select>`;
+    const groups = regions.map(r=>({label:r.name, opts:g.cons.filter(c=>c.regionId===r.id).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>({v:c.id,t:c.name}))}));
+    conFilter = `<select id="fcon"><option value="">All constituencies</option>${groups.map(grp=>`<optgroup label="${esc(grp.label)}">${grp.opts.map(o=>`<option value="${esc(o.v)}">${esc(o.t)}</option>`).join('')}</optgroup>`).join('')}</select>`;
+  }
   return `
-  <div class="section-head"><h2>Search</h2>${scoped?`<span class="sub">${esc((g.cMap[scoped]||{}).name||'')}</span>`:''}</div>
+  <div class="section-head"><h2>Search</h2>${scoped?`<span class="sub">${esc((g.cMap[scoped]||{}).name||'')}</span>`:`<span class="sub">${esc(NATION_NAME)}</span>`}</div>
   <div class="searchbar"><input id="sq" placeholder="Search by name, position, phone, reg no…" value="${esc(q.q||'')}"><button class="btn primary" data-act="runSearch">Search</button></div>
   <div class="filters">
+    ${regFilter}
     ${conFilter}
     <select id="flevel"><option value="">All levels</option><option value="region">Region</option><option value="constituency">Constituency</option><option value="ward">Ward</option><option value="branch">Branch</option><option value="unit">Unit</option></select>
     <select id="fgender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
     <select id="fsort"><option value="reg">Sort: Reg. number</option><option value="name">Sort: Name</option><option value="position">Sort: Position</option><option value="recent">Sort: Recent</option></select>
   </div>
-  <div id="results"><p class="muted small">${execs.length} executive(s) ${scoped?'in your constituency':'across the region'}. Type to filter.</p></div>`;
+  <div id="results"><p class="muted small">${execs.length} executive(s) ${scoped?'in your constituency':'across the country'}. Type to filter.</p></div>`;
 }
 function albumResultItem(e){
   return `<div class="item" data-link="#/exec/${e.id}">
     <div class="av">${e.photo?`<img src="${e.photo}" alt="">`:initials(e.fullName)}</div>
-    <div class="body"><div class="nm">${esc(e.fullName)}</div><div class="mt">${e.regNo?`<span class="reg">${esc(e.regNo)}</span> • `:''}${esc(e.position||'—')}${e._con?' • '+esc(e._con):''}</div></div>
+    <div class="body"><div class="nm">${esc(e.fullName)}</div><div class="mt">${e.regNo?`<span class="reg">${esc(e.regNo)}</span> • `:''}${esc(e.position||'—')}${e._con?' • '+esc(e._con):(e._region?' • '+esc(e._region):'')}</div></div>
     <div class="chev">›</div>
   </div>`;
 }
@@ -1060,8 +1148,10 @@ function wireSearch(){
     const execs=State._searchCache||[];
     const q=($('#sq').value||'').toLowerCase().trim();
     const lv=$('#flevel').value, gn=$('#fgender').value, sort=$('#fsort').value;
+    const regEl=$('#freg'); const reg=regEl?regEl.value:'';
     const conEl=$('#fcon'); const con=conEl?conEl.value:'';
     let out=execs.filter(e=>{
+      if(reg&&e._regionId!==reg) return false;
       if(con&&e._conId!==con) return false;
       if(lv&&e.level!==lv) return false;
       if(gn&&e.gender!==gn) return false;
@@ -1080,6 +1170,7 @@ function wireSearch(){
   $('#sq').oninput=run; $('#sq').addEventListener('keydown',e=>{if(e.key==='Enter')run();});
   $('#flevel').onchange=run; $('#fgender').onchange=run; $('#fsort').onchange=run;
   const conEl=$('#fcon'); if(conEl) conEl.onchange=run;
+  const regEl=$('#freg'); if(regEl) regEl.onchange=run;
   if($('#sq').value) run();
 }
 
@@ -1107,7 +1198,7 @@ async function viewReports(){
 
   const unitNoExec = units.filter(u=>!execs.some(e=>e.level==='unit'&&e.unitId===u.id));
   const branchNoExec = branches.filter(b=>!execs.some(e=>e.level==='branch'&&e.branchId===b.id));
-  const scopeLabel = scoped? ((g.cMap[scoped]||{}).name||'') : (State.settings.region||REGION_NAME);
+  const scopeLabel = scoped? ((g.cMap[scoped]||{}).name||'') : NATION_NAME;
 
   return `
   <div class="section-head"><h2>Reports & analytics</h2><span class="sub">${esc(scopeLabel)}</span><span class="spacer"></span><button class="btn sm" data-link="#/album">📸 Photo album</button><button class="btn sm" data-act="exportReport">⬇ Export CSV</button></div>
@@ -1135,7 +1226,7 @@ async function viewReports(){
       <dt>Ward level</dt><dd>${byLevel('ward').length}</dd>
       <dt>Branch level</dt><dd>${byLevel('branch').length}</dd>
       <dt>Unit level</dt><dd>${byLevel('unit').length}</dd>
-      <dt>${scoped?'Wards / Branches / Units':'Constituencies / Wards / Branches / Units'}</dt><dd>${scoped?'':(g.cons.length+' / ')}${wards.length} / ${branches.length} / ${units.length}</dd>
+      <dt>${scoped?'Wards / Branches / Units':'Regions / Constituencies / Wards / Branches / Units'}</dt><dd>${scoped?'':(g.regions.length+' / '+g.cons.length+' / ')}${wards.length} / ${branches.length} / ${units.length}</dd>
     </div>
   </div>`;
 }
@@ -1150,25 +1241,32 @@ async function viewAlbum(q){
   const execs = g.execs.filter(inSet);
   const wards = scoped? g.wards.filter(w=>w.constituencyId===scoped) : g.wards;
 
-  // enrich each exec with constituency, group key, and a location label
+  // enrich each exec with region/constituency, group key, and a location label
   const enriched = execs.map(e=>{
     const cid=g.conOf(e); const con=cid?g.cMap[cid]:null;
+    const rid=g.regionOf(e); const reg=rid?g.rMap[rid]:null;
     let groupKey, groupName, loc='';
-    if(e.level==='region'){ groupKey='__region'; groupName=REGION_NAME; loc=REGION_NAME+' (Region)'; }
-    else if(e.level==='constituency'){ groupKey='con:'+cid; groupName=con?con.name:'—'; loc=(con?con.name:'')+' (Constituency)'; }
+    if(e.level==='region'){ groupKey='reg:'+rid; groupName=(reg?reg.name:rid)+' (Region)'; loc=(reg?reg.name:'')+' (Region)'; }
+    else if(e.level==='constituency'){ groupKey='con:'+cid; groupName=con?con.name+' ('+(reg?reg.code:con.regionId)+')':'—'; loc=(con?con.name:'')+' (Constituency)'; }
     else {
-      groupKey='con:'+cid; groupName=con?con.name:'Unassigned';
+      groupKey='con:'+cid; groupName=con?con.name+' ('+(reg?reg.code:con.regionId)+')':'Unassigned';
       if(e.level==='ward'){ const w=g.wMap[e.wardId]; loc=(w?w.name:'')+' (Ward)'; }
       else if(e.level==='branch'){ const b=g.bMap[e.branchId]; loc=(b?b.name:'—')+' (Branch)'; }
       else { const u=g.uMap[e.unitId]; const b=u?g.bMap[u.branchId]:null; loc=(u?u.name:'—')+(b?' • '+b.name:'')+' (Unit)'; }
     }
-    return Object.assign({}, e, {_conId:cid, _con:con?con.name:'', _groupKey:groupKey, _groupName:groupName, _loc:loc});
+    return Object.assign({}, e, {_conId:cid, _con:con?con.name:'', _regionId:rid, _groupKey:groupKey, _groupName:groupName, _loc:loc});
   });
-  State._album = {execs:enriched, wards, cons:g.cons};
+  State._album = {execs:enriched, wards, cons:g.cons, regions:g.regions};
 
-  const conOpts = isRegional() ? `<option value="">All constituencies</option>`+g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="con:${c.id}" ${q.con==='con:'+c.id?'selected':''}>${esc(c.name)}</option>`).join('') : '';
+  let regOpts='', conOpts='';
+  if(isNational()){
+    const regions = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    regOpts = `<select id="albReg"><option value="">All regions</option>${regions.map(r=>`<option value="${r.id}" ${q.reg===r.id?'selected':''}>${esc(r.name)}</option>`).join('')}</select>`;
+    const groups = regions.map(r=>({label:r.name, opts:g.cons.filter(c=>c.regionId===r.id).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>({v:'con:'+c.id,t:c.name}))}));
+    conOpts = `<select id="albCon"><option value="">All constituencies</option>${groups.map(grp=>`<optgroup label="${esc(grp.label)}">${grp.opts.map(o=>`<option value="${esc(o.v)}" ${q.con===o.v?'selected':''}>${esc(o.t)}</option>`).join('')}</optgroup>`).join('')}</select>`;
+  }
   const levelOpts = `<option value="">All levels</option>`+(scoped?['constituency','ward','branch','unit']:['region','constituency','ward','branch','unit']).map(l=>`<option value="${l}" ${q.level===l?'selected':''}>${LVS[l]}</option>`).join('');
-  const scopeName = scoped? ((g.cMap[scoped]||{}).name||'') : (State.settings.region||REGION_NAME);
+  const scopeName = scoped? ((g.cMap[scoped]||{}).name||'') : NATION_NAME;
 
   return `
   <div class="album-print-head print-only">
@@ -1181,7 +1279,8 @@ async function viewAlbum(q){
     <button class="btn sm primary" data-act="printAlbum">🖨️ Print / Save PDF</button>
   </div>
   <div class="filters no-print">
-    ${conOpts?`<select id="albCon">${conOpts}</select>`:''}
+    ${regOpts}
+    ${conOpts}
     <select id="albLevel">${levelOpts}</select>
     <select id="albSort"><option value="reg">Sort: Reg. number</option><option value="name">Sort: Name</option></select>
   </div>
@@ -1190,10 +1289,12 @@ async function viewAlbum(q){
 
 function albumRenderBody(){
   const data = State._album; if(!data) return;
+  const regF = $('#albReg') ? $('#albReg').value : '';
   const conF = $('#albCon') ? $('#albCon').value : '';
   const levelF = $('#albLevel') ? $('#albLevel').value : '';
   const sortF = $('#albSort') ? $('#albSort').value : 'reg';
   let list = data.execs.filter(e=>{
+    if(regF && e._regionId!==regF) return false;
     if(conF && e._groupKey!==conF) return false;
     if(levelF && e.level!==levelF) return false;
     return true;
@@ -1203,14 +1304,16 @@ function albumRenderBody(){
     : (a,b)=> String(a.regNo||'').localeCompare(String(b.regNo||''));
   list.sort(sorter);
 
-  // group by constituency (regional view) / ward (scoped view, via _loc)
+  // group by region/constituency (national view) / ward (scoped view, via _loc)
   const groups={};
   list.forEach(e=>{ (groups[e._groupName]=groups[e._groupName]||[]).push(e); });
   const groupNames = Object.keys(groups).sort((a,b)=>a==='Unassigned'?1:b==='Unassigned'?-1:a.localeCompare(b));
 
   const meta = $('#albumPrintMeta');
   if(meta){
-    const scope = conF ? ((data.cons.find(c=>'con:'+c.id===conF)||{}).name||'') : 'All constituencies';
+    let scope = 'All constituencies';
+    if(conF) scope = (data.cons.find(c=>'con:'+c.id===conF)||{}).name||'';
+    else if(regF) scope = (data.regions.find(r=>r.id===regF)||{}).name||'';
     meta.textContent = `Executive Photo Album • ${scope}${levelF?' • '+LVS[levelF]:''} • ${list.length} executive(s) • ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}`;
   }
 
@@ -1240,7 +1343,7 @@ function albumRenderBody(){
 
 function wireAlbum(){
   albumRenderBody();
-  ['albCon','albLevel','albSort'].forEach(id=>{ const el=$('#'+id); if(el) el.onchange=albumRenderBody; });
+  ['albReg','albCon','albLevel','albSort'].forEach(id=>{ const el=$('#'+id); if(el) el.onchange=albumRenderBody; });
   const pb=$('[data-act=printAlbum]'); if(pb) pb.onclick=()=>window.print();
 }
 
@@ -1270,11 +1373,11 @@ async function viewData(){
     <p class="muted small" style="margin:0 0 12px">A full backup includes every record and photo as a single file you can store safely or move to another device.</p>
     <div class="row wrap">
       <button class="btn" data-act="backup">💾 Download full backup</button>
-      ${(State.session.role==='regional_admin'||State.session.role==='constituency_admin')?`<input type="file" id="bkIn" accept=".json" class="hidden"><button class="btn danger" data-act="restore">♻ Restore from backup</button>`:''}
+      ${(State.session.role==='national_admin'||State.session.role==='constituency_admin')?`<input type="file" id="bkIn" accept=".json" class="hidden"><button class="btn danger" data-act="restore">♻ Restore from backup</button>`:''}
     </div>
   </div>`;
 }
-const CSV_COLS = ['level','constituency','ward','branch','unit','fullName','position','gender','phone','email','dob','occupation','address','background'];
+const CSV_COLS = ['level','region','constituency','ward','branch','unit','fullName','position','gender','phone','email','dob','occupation','address','background'];
 const EXPORT_COLS = ['regNo'].concat(CSV_COLS);
 function csvEscape(v){ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 function toCSV(rows, cols=CSV_COLS){ return [cols.join(',')].concat(rows.map(r=>cols.map(c=>csvEscape(r[c])).join(','))).join('\n'); }
@@ -1297,16 +1400,20 @@ async function exportExecsCSV(){
   const wn=id=>{const x=(g.wMap[id]||{});return x.name||'';};
   const bn=id=>{const x=(g.bMap[id]||{});return x.name||'';};
   const un=id=>{const x=(g.uMap[id]||{});return x.name||'';};
-  const cn=(e)=>{ const cid=g.conOf(e); if(!cid) return e.level==='region'?REGION_NAME:''; return (g.cMap[cid]||{}).name||''; };
-  const rows=execs.map(e=>({
+  const rn=(rid)=> (g.rMap[rid]||{}).name||'';
+  const cn=(e)=>{ const cid=g.conOf(e); if(!cid) return ''; return (g.cMap[cid]||{}).name||''; };
+  const rows=execs.map(e=>{
+    const rid=g.regionOf(e);
+    return {
     regNo:e.regNo||'', level:e.level,
+    region: rn(rid),
     constituency: e.level==='constituency'? (g.cMap[e.constituencyId]||{}).name||'' : cn(e),
     ward:e.level==='ward'?wn(e.wardId):(e.level==='branch'?wn((g.bMap[e.branchId]||{}).wardId):(e.level==='unit'?wn((g.bMap[(g.uMap[e.unitId]||{}).branchId]||{}).wardId):'')),
     branch:e.level==='branch'?bn(e.branchId):(e.level==='unit'?bn((g.uMap[e.unitId]||{}).branchId):''),
     unit:e.level==='unit'?un(e.unitId):'',
     fullName:e.fullName, position:e.position, gender:e.gender, phone:e.phone, email:e.email, dob:e.dob, occupation:e.occupation, address:e.address, background:e.background
-  }));
-  const fname = scoped? `ndc_${((g.cMap[scoped]||{}).code||scoped).toLowerCase()}_executives_${new Date().toISOString().slice(0,10)}.csv` : `ndc_western_region_executives_${new Date().toISOString().slice(0,10)}.csv`;
+  };});
+  const fname = scoped? `ndc_${((g.cMap[scoped]||{}).code||scoped).toLowerCase()}_executives_${new Date().toISOString().slice(0,10)}.csv` : `ndc_ghana_executives_${new Date().toISOString().slice(0,10)}.csv`;
   download(fname, toCSV(rows, EXPORT_COLS),'text/csv');
   await audit('EXPORT','executive','','Exported '+rows.length+' executives to CSV');
   toast('Exported '+rows.length+' record(s)');
@@ -1318,11 +1425,19 @@ async function importCSV(file){
   const g = await loadGraph();
   const scoped = userConId();
   let wards=g.wards.slice(), branches=g.branches.slice(), units=g.units.slice(), cons=g.cons.slice();
-  const findCon=async (name)=>{
+  // Resolve a region by name or code.
+  const findRegion=(name)=>{
+    name=(name||'').trim(); if(!name) return null;
+    const found = g.regions.find(r=>r.name.toLowerCase()===name.toLowerCase() || r.code.toLowerCase()===name.toLowerCase());
+    return found? found.id : null;
+  };
+  // Resolve a constituency by name (and region, when given, to disambiguate duplicate names).
+  const findCon=(name, regionId)=>{
     name=(name||'').trim();
     if(!name) return scoped||null;
-    let found = cons.find(c=>c.name.toLowerCase()===name.toLowerCase() || c.code.toLowerCase()===name.toLowerCase());
-    return found? found.id : (scoped||null);
+    let matches = cons.filter(c=>c.name.toLowerCase()===name.toLowerCase() || c.code.toLowerCase()===name.toLowerCase());
+    if(regionId) matches = matches.filter(c=>c.regionId===regionId).length ? matches.filter(c=>c.regionId===regionId) : matches;
+    return matches.length? matches[0].id : (scoped||null);
   };
   const findOrCreate=async (type,name,parentField,parentId,extra)=>{
     name=(name||'').trim(); if(!name) return null;
@@ -1339,9 +1454,18 @@ async function importCSV(file){
     const level=get('level').toLowerCase();
     if(!['region','constituency','ward','branch','unit'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level`); continue; }
     if(!get('fullName')||!get('position')||!get('gender')||!get('phone')){ fail++; errs.push(`Row ${r+1}: missing required field`); continue; }
-    const conId = await findCon(get('constituency'));
-    if(level!=='region' && !conId){ fail++; errs.push(`Row ${r+1}: constituency not found / not in your scope`); continue; }
-    if(level!=='region' && !inScope(conId)){ fail++; errs.push(`Row ${r+1}: constituency outside your scope`); continue; }
+    const regionIdHint = findRegion(get('region'));
+    if(level==='region'){
+      const rid = regionIdHint;
+      if(!rid){ fail++; errs.push(`Row ${r+1}: region not found`); continue; }
+      const id=uid();
+      const rec={id, level, regionId:rid, fullName:get('fullName'), position:get('position'), gender:(get('gender').toLowerCase()), phone:get('phone'), email:get('email'), dob:get('dob'), occupation:get('occupation'), address:get('address'), background:get('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
+      rec.regNo = await nextRegNo(await prefixForExec(rec));
+      await Store.set('exec:'+id,rec); ok++; continue;
+    }
+    const conId = findCon(get('constituency'), regionIdHint);
+    if(!conId){ fail++; errs.push(`Row ${r+1}: constituency not found / not in your scope`); continue; }
+    if(!inScope(conId)){ fail++; errs.push(`Row ${r+1}: constituency outside your scope`); continue; }
     let wardId=null,branchId=null,unitId=null;
     if(level==='ward'||level==='branch'||level==='unit'){ const w=await findOrCreate('ward',get('ward'),null,null,{constituencyId:conId}); if(w) wardId=w.id; }
     if(level==='branch'||level==='unit'){ const b=await findOrCreate('branch',get('branch'),'wardId',wardId); if(b) branchId=b.id; }
@@ -1352,7 +1476,7 @@ async function importCSV(file){
     const id=uid();
     const rec={id, level, fullName:get('fullName'), position:get('position'), gender:(get('gender').toLowerCase()), phone:get('phone'), email:get('email'), dob:get('dob'), occupation:get('occupation'), address:get('address'), background:get('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
     if(level==='constituency') rec.constituencyId=conId;
-    else if(level!=='region') rec[level+'Id'] = level==='ward'?wardId:level==='branch'?branchId:unitId;
+    else rec[level+'Id'] = level==='ward'?wardId:level==='branch'?branchId:unitId;
     rec.regNo = await nextRegNo(await prefixForExec(rec));
     await Store.set('exec:'+id,rec); ok++;
   }
@@ -1378,7 +1502,7 @@ async function restoreBackup(file){
 }
 function wireData(){
   $('[data-act=exportCsv]').onclick=exportExecsCSV;
-  $('[data-act=downloadTemplate]').onclick=()=>{ download('ndc_import_template.csv', CSV_COLS.join(',')+'\nward,Essikado-Ketan,Esikado Central,,,Ama Mensah,Chairman,female,0244000000,,1985-03-12,Trader,Esikado,5 years organizing\n','text/csv'); };
+  $('[data-act=downloadTemplate]').onclick=()=>{ download('ndc_import_template.csv', CSV_COLS.join(',')+'\nward,Western Region,Essikado-Ketan,Esikado Central,,,Ama Mensah,Chairman,female,0244000000,,1985-03-12,Trader,Esikado,5 years organizing\n','text/csv'); };
   const ci=$('#csvIn'); $('[data-act=pickCsv]').onclick=()=>ci.click(); ci.onchange=e=>{ if(e.target.files[0]) importCSV(e.target.files[0]); };
   $('[data-act=backup]').onclick=fullBackup;
   const bk=$('#bkIn'); if(bk){ $('[data-act=restore]').onclick=()=>bk.click(); bk.onchange=e=>{ if(e.target.files[0]) restoreBackup(e.target.files[0]); }; }
@@ -1391,27 +1515,21 @@ async function viewAdmin(){
   const g = await loadGraph();
   const users=await Data.users();
   const conName = (cid)=> cid? ((g.cMap[cid]||{}).name||cid) : '—';
-  const settingsCard = isRegional() ? `
-  <div class="card pad">
-    <h3 style="font-size:15px;margin-bottom:4px">Region</h3>
-    <div class="grid2" style="margin-top:8px">
-      <div class="field" style="margin:0"><label>Region name</label><input id="setReg" value="${esc(State.settings.region||REGION_NAME)}"></div>
-      <div class="field" style="margin:0"><label>Region code</label><input id="setRegCode" value="${esc(State.settings.regionCode||REGION_CODE)}"></div>
-    </div>
-    <button class="btn sm primary" data-act="saveSettings" style="margin-top:10px">Save</button>
-  </div>` : '';
 
   return `
   <div class="section-head"><h2>Administration</h2></div>
 
-  ${settingsCard}
+  <div class="card pad">
+    <h3 style="font-size:15px;margin-bottom:4px">Coverage</h3>
+    <p class="muted small" style="margin:0">${esc(NATION_NAME)} • ${g.regions.length} regions • ${g.cons.length} constituencies (fixed national structure)</p>
+  </div>
 
   <div class="card pad" style="margin-top:14px">
-    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span>${isRegional()?`<button class="btn sm primary" data-act="newUser">＋ User</button>`:''}</div>
+    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span>${isNational()?`<button class="btn sm primary" data-act="newUser">＋ User</button>`:''}</div>
     <div class="list">${users.map(u=>`
       <div class="item"><div class="av">${initials(u.fullName||u.username)}</div>
-        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${u.role==='regional_admin'?'y':u.role==='constituency_admin'?'':'k'}">${esc(u.role.replace(/_/g,' '))}</span></div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}</div></div>
-        ${(isRegional()&&u.username!=='admin')?`<button class="btn sm danger" data-act="delUser" data-id="${esc(u.username)}">✕</button>`:(u.username==='admin'?'<span class="tiny muted">primary</span>':'')}
+        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${u.role==='national_admin'?'y':u.role==='constituency_admin'?'':'k'}">${esc(u.role.replace(/_/g,' '))}</span></div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}</div></div>
+        ${(isNational()&&u.username!=='admin')?`<button class="btn sm danger" data-act="delUser" data-id="${esc(u.username)}">✕</button>`:(u.username==='admin'?'<span class="tiny muted">primary</span>':'')}
       </div>`).join('')}</div>
   </div>
 
@@ -1423,14 +1541,14 @@ async function viewAdmin(){
   </div>`;
 }
 function wireAdmin(){
-  const ss=$('[data-act=saveSettings]'); if(ss) ss.onclick=async ()=>{ State.settings={region:$('#setReg').value.trim()||REGION_NAME, regionCode:$('#setRegCode').value.trim()||REGION_CODE}; await Store.set('settings',State.settings); toast('Saved'); render(); };
   const nu=$('[data-act=newUser]'); if(nu) nu.onclick=newUserFlow;
   document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{ const go=await confirmModal('Remove user?','This removes login access for @'+b.dataset.id+'.'); if(go){ await Store.del('user:'+b.dataset.id); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); } });
   $('[data-act=resetPw]').onclick=async()=>{ const pw=$('#newPw').value; if(pw.length<4){ toast('Use at least 4 characters',true); return; } const u=await Store.get('user:'+State.session.username); u.password=pw; await Store.set('user:'+State.session.username,u); State.session.password=pw; toast('Password updated'); };
 }
 async function newUserFlow(){
   const g = await loadGraph();
-  const conOpts = g.cons.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const regions = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const conGroups = regions.map(r=>`<optgroup label="${esc(r.name)}">${g.cons.filter(c=>c.regionId===r.id).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</optgroup>`).join('');
   const body=`
     <div class="field"><label>Full name</label><input id="nuName"></div>
     <div class="field"><label>Username</label><input id="nuUser"></div>
@@ -1440,19 +1558,19 @@ async function newUserFlow(){
       <option value="ward_admin">Ward Admin</option>
       <option value="branch_admin">Branch Admin</option>
       <option value="viewer">Viewer</option>
-      <option value="regional_admin">Regional Admin</option>
+      <option value="national_admin">National Admin</option>
     </select></div>
-    <div class="field" id="nuConField"><label>Constituency</label><select id="nuCon"><option value="">Select…</option>${conOpts}</select></div>`;
+    <div class="field" id="nuConField"><label>Constituency</label><select id="nuCon"><option value="">Select…</option>${conGroups}</select></div>`;
   const r=await modalForm('Add user',body);
   if(!r.ok) return;
   const name=$('#nuName').value.trim(), username=$('#nuUser').value.trim().toLowerCase(), pw=$('#nuPw').value, role=$('#nuRole').value, conId=$('#nuCon').value;
   if(!username||!pw){ toast('Username and password are required',true); return; }
   if(await Store.get('user:'+username)){ toast('That username is taken',true); return; }
-  if(role!=='regional_admin' && !conId){ toast('Select a constituency for this user',true); return; }
+  if(role!=='national_admin' && !conId){ toast('Select a constituency for this user',true); return; }
   r.el.remove();
   const con = conId? await Store.get('con:'+conId) : null;
   const rec={id:username,username,password:pw,fullName:name||username,role};
-  if(role!=='regional_admin'){ rec.scopeConstituencyId=conId; rec.scopeConstituencyName=con?con.name:conId; }
+  if(role!=='national_admin'){ rec.scopeConstituencyId=conId; rec.scopeConstituencyName=con?con.name:conId; }
   await Store.set('user:'+username,rec);
   await audit('CREATE','user',username,'Added user @'+username+' ('+role+(con?', '+con.name:'')+')');
   toast('User added'); render();

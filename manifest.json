@@ -1,7 +1,7 @@
 {
-  "name": "Western Region NDC Executive Registry",
+  "name": "Ghana NDC Executive Registry",
   "short_name": "NDC Registry",
-  "description": "Five-tier party executive registry for the Western Region NDC, with constituency-level access.",
+  "description": "National five-tier party executive registry for the NDC, covering all 16 regions and 276 constituencies of Ghana, with region- and constituency-level access.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

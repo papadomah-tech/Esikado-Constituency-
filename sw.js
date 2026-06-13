@@ -1,10 +1,10 @@
-/* Keten Esikado NDC Registry — offline app shell
+/* Ghana NDC Executive Registry — offline app shell
    Strategy:
    - The HTML document is fetched NETWORK-FIRST so a redeploy always reaches
      the user when online, with the cached copy used only as an offline fallback.
    - Static assets (icons, manifest) are cache-first for speed.
    Bump CACHE on every release so old shells are discarded. */
-const CACHE = 'ndc-wr-v6';
+const CACHE = 'ndc-gh-v7';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
