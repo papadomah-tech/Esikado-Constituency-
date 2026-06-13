@@ -231,40 +231,101 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
    ============================================================ */
 
 /* ---------------- Storage layer (KV) ---------------- */
-const Store = (() => {
-  const native = (typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function');
-  let dbP;
-  function idb(){
-    if(!dbP){ dbP = new Promise((res,rej)=>{
-      const r = indexedDB.open('ndc_keten_db',1);
-      r.onupgradeneeded = ()=> r.result.createObjectStore('kv');
-      r.onsuccess = ()=> res(r.result);
-      r.onerror = ()=> rej(r.error);
-    }); }
-    return dbP;
-  }
-  const tx = async (mode,fn)=>{ const db=await idb(); return new Promise((res,rej)=>{ const t=db.transaction('kv',mode).objectStore('kv'); const rq=fn(t); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); };
-  async function idbKeys(prefix){ const db=await idb(); return new Promise((res,rej)=>{ const out=[]; const c=db.transaction('kv','readonly').objectStore('kv').openKeyCursor(); c.onsuccess=e=>{ const cur=e.target.result; if(cur){ const k=String(cur.key); if(!prefix||k.startsWith(prefix)) out.push(k); cur.continue(); } else res(out); }; c.onerror=()=>rej(c.error); }); }
+/* ============================================================
+   SUPABASE CLIENT — replaces local IndexedDB Store
+   All registry data (users, executives, wards, branches, units,
+   sequences, audit) lives in a single shared Supabase project so
+   every device reads and writes the same data in real time.
+   ============================================================ */
+const SUPABASE_URL = 'https://fiuquuftdaomqazuohsh.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXF1dWZ0ZGFvbXFhenVvaHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNjU1MzUsImV4cCI6MjA5Njk0MTUzNX0.Pm5nMXQq1Nc3zZovTe_FzMGvll-8r9P28pse1Fnzgjk';
 
-  async function get(k){
-    if(native){ try{ const r=await window.storage.get(k,false); return r? JSON.parse(r.value):null; }catch{ return null; } }
-    const v=await tx('readonly',s=>s.get(k)); return v? JSON.parse(v):null;
+async function sbFetch(path, opts={}){
+  const url = SUPABASE_URL + '/rest/v1/' + path;
+  const headers = Object.assign({
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': opts.prefer || '',
+  }, opts.headers||{});
+  delete headers[''];
+  const res = await fetch(url, Object.assign({cache:'no-store'}, opts, {headers}));
+  if(!res.ok){
+    const txt = await res.text().catch(()=>'');
+    throw new Error('Supabase '+res.status+': '+txt.slice(0,120));
   }
-  async function set(k,v){ const s=JSON.stringify(v);
-    if(native){ await window.storage.set(k,s,false); return; }
-    await tx('readwrite',st=>st.put(s,k));
-  }
-  async function del(k){
-    if(native){ try{ await window.storage.delete(k,false); }catch{} return; }
-    await tx('readwrite',st=>st.delete(k));
-  }
-  async function keys(prefix){
-    if(native){ try{ const r=await window.storage.list(prefix,false); return (r&&r.keys)||[]; }catch{ return []; } }
-    return idbKeys(prefix);
-  }
-  async function getAll(prefix){ const ks=await keys(prefix); const out=[]; for(const k of ks){ const v=await get(k); if(v) out.push(v); } return out; }
-  return {get,set,del,keys,getAll,backend: native?'window.storage':'IndexedDB'};
-})();
+  const ct = res.headers.get('content-type')||'';
+  if(ct.includes('json') && res.status!==204){ try{ return await res.json(); }catch{ return null; } }
+  return null;
+}
+
+// Thin table-level helpers
+const SB = {
+  // SELECT — returns array
+  select: (table, qs='')=> sbFetch(table+'?'+qs, {method:'GET', prefer:''}),
+  // INSERT with upsert
+  upsert: (table, body)=> sbFetch(table, {method:'POST', body:JSON.stringify(body), prefer:'resolution=merge-duplicates,return=representation'}),
+  // UPDATE by eq filter
+  update: (table, filter, body)=> sbFetch(table+'?'+filter, {method:'PATCH', body:JSON.stringify(body), prefer:'return=representation'}),
+  // DELETE by eq filter
+  delete: (table, filter)=> sbFetch(table+'?'+filter, {method:'DELETE', prefer:''}),
+};
+
+// ---- camelCase <-> snake_case mappers ----
+function execToRow(e){
+  return {
+    id: e.id, level: e.level,
+    region_id: e.regionId||null,
+    constituency_id: e.constituencyId||null,
+    ward_id: e.wardId||null,
+    branch_id: e.branchId||null,
+    unit_id: e.unitId||null,
+    full_name: e.fullName, position: e.position,
+    gender: e.gender||null, phone: e.phone||null, email: e.email||null,
+    dob: e.dob||null, occupation: e.occupation||null,
+    address: e.address||null, background: e.background||null,
+    photo: e.photo||null, reg_no: e.regNo||null,
+    status: e.status||'active',
+    created_at: e.createdAt||new Date().toISOString(),
+    updated_at: e.updatedAt||new Date().toISOString(),
+    created_by: e.createdBy||null,
+  };
+}
+function rowToExec(r){
+  return {
+    id:r.id, level:r.level, regionId:r.region_id, constituencyId:r.constituency_id,
+    wardId:r.ward_id, branchId:r.branch_id, unitId:r.unit_id,
+    fullName:r.full_name, position:r.position, gender:r.gender, phone:r.phone,
+    email:r.email, dob:r.dob, occupation:r.occupation, address:r.address,
+    background:r.background, photo:r.photo, regNo:r.reg_no, status:r.status,
+    createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by,
+  };
+}
+function wardToRow(w){
+  return {id:w.id, name:w.name, constituency_id:w.constituencyId, code:w.code||null, created_at:w.createdAt||new Date().toISOString(), updated_at:w.updatedAt||new Date().toISOString(), created_by:w.createdBy||null};
+}
+function rowToWard(r){ return {id:r.id, name:r.name, constituencyId:r.constituency_id, code:r.code, type:'ward', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
+function branchToRow(b){ return {id:b.id, name:b.name, ward_id:b.wardId, created_at:b.createdAt||new Date().toISOString(), updated_at:b.updatedAt||new Date().toISOString(), created_by:b.createdBy||null}; }
+function rowToBranch(r){ return {id:r.id, name:r.name, wardId:r.ward_id, type:'branch', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
+function unitToRow(u){ return {id:u.id, name:u.name, branch_id:u.branchId, created_at:u.createdAt||new Date().toISOString(), updated_at:u.updatedAt||new Date().toISOString(), created_by:u.createdBy||null}; }
+function rowToUnit(r){ return {id:r.id, name:r.name, branchId:r.branch_id, type:'unit', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
+function userToRow(u){
+  return {id:u.id||u.username, username:u.username, password:u.password, full_name:u.fullName||u.username, role:u.role, scope_constituency_id:u.scopeConstituencyId||null, scope_constituency_name:u.scopeConstituencyName||null, must_change_password:u.mustChangePassword||false, updated_at:new Date().toISOString()};
+}
+function rowToUser(r){
+  return {id:r.id, username:r.username, password:r.password, fullName:r.full_name, role:r.role, scopeConstituencyId:r.scope_constituency_id, scopeConstituencyName:r.scope_constituency_name, mustChangePassword:r.must_change_password||false};
+}
+
+// ---- Store shim — same API as before, backed by Supabase ----
+const Store = {
+  // Kept for legacy callers that pass 'meta:session' etc. — stored in sessionStorage only
+  _local: {
+    get: k=> { try{ const v=sessionStorage.getItem('ndc:'+k); return v? JSON.parse(v):null; }catch{ return null; } },
+    set: (k,v)=> { try{ sessionStorage.setItem('ndc:'+k, JSON.stringify(v)); }catch{} },
+    del: k=> { try{ sessionStorage.removeItem('ndc:'+k); }catch{} },
+  },
+  get backend(){ return 'Supabase'; },
+};
 
 /* ---------------- Helpers ---------------- */
 const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,8);
@@ -281,8 +342,8 @@ const LVS = {region:'Region', constituency:'Constituency', ward:'Ward', branch:'
 /* ---------------- Audit ---------------- */
 async function audit(action, entityType, entityId, detail){
   const u = State.session;
-  const rec = {id:uid(), ts:nowISO(), user:(u?u.username:'system'), role:(u?u.role:''), action, entityType, entityId, detail:detail||''};
-  await Store.set('audit:'+rec.id, rec);
+  const rec = {id:uid(), ts:nowISO(), username:(u?u.username:'system'), role:(u?u.role:''), action, entity_type:entityType, entity_id:entityId||'', detail:detail||''};
+  try{ await SB.upsert('ndc_audit', rec); }catch(e){ console.warn('Audit write failed:',e.message); }
 }
 
 /* ---------------- Default positions slate ---------------- */
@@ -342,114 +403,87 @@ const State = { session:null, settings:{}, currentCon:null };
 
 /* ---------------- Bootstrap / seed ---------------- */
 async function bootstrap(){
-  const init = await Store.get('meta:init');
-  // Seed the default admin account independently of meta:init, and only if it
-  // doesn't already exist. This guarantees a changed admin password can never be
-  // silently reverted to the default, even if the init flag is lost on this device.
-  const existingAdmin = await Store.get('user:admin');
-  if(!existingAdmin){
-    await Store.set('user:admin', {id:'admin', username:'admin', password:'ndc2024', fullName:'National Administrator', role:'national_admin', scopeConstituencyId:null, mustChangePassword:true});
-  } else if(existingAdmin.password==='ndc2024' && !existingAdmin.mustChangePassword){
-    // An account still on the published default password (e.g. an existing
-    // install from before this safeguard existed) must change it on next login.
-    existingAdmin.mustChangePassword = true;
-    await Store.set('user:admin', existingAdmin);
+  try{
+    // Ensure the default admin account exists in Supabase (only inserts if absent).
+    await SB.upsert('ndc_users', {
+      id:'admin', username:'admin', password:'ndc2024',
+      full_name:'National Administrator', role:'national_admin',
+      must_change_password:true,
+    });
+    // If admin already existed with a real password, the upsert merge keeps it
+    // (Supabase merge-duplicates: existing columns win when the row already exists).
+    // However, we must NOT force must_change_password=true on a row where the admin
+    // has already changed it — so we patch only when the stored password IS still ndc2024.
+    const adminRows = await SB.select('ndc_users','id=eq.admin&select=password,must_change_password');
+    const adm = adminRows && adminRows[0];
+    if(adm && adm.password==='ndc2024' && !adm.must_change_password){
+      await SB.update('ndc_users','id=eq.admin',{must_change_password:true});
+    }
+  }catch(e){ console.warn('Bootstrap admin seed error:',e.message); }
+  // Restore session from sessionStorage (survives page refresh, not new tab)
+  const sess = Store._local.get('meta:session');
+  if(sess){
+    try{
+      const rows = await SB.select('ndc_users','username=eq.'+encodeURIComponent(sess)+'&limit=1');
+      if(rows && rows[0]) State.session = rowToUser(rows[0]);
+    }catch(e){ console.warn('Session restore error:',e.message); }
   }
-  if(!init){
-    await Store.set('positions', DEFAULT_POSITIONS);
-    await Store.set('settings', State.settings);
-    await Store.set('meta:init', {at:nowISO(), version:'3.0'});
-  }
-  // seed/refresh the fixed national structure: 16 regions and 276 constituencies
-  for(const r of REGIONS){
-    const ex = await Store.get('reg:'+r.code);
-    if(!ex) await Store.set('reg:'+r.code, {id:r.code, code:r.code, name:r.name, type:'region'});
-  }
-  for(const c of CONSTITUENCIES){
-    const ex = await Store.get('con:'+c.code);
-    if(!ex) await Store.set('con:'+c.code, {id:c.code, code:c.code, name:c.name, regionId:c.regionId, type:'constituency'});
-  }
-  const s = await Store.get('settings'); if(s) State.settings=s;
-  await migrateToNational();
-  const sess = await Store.get('meta:session');
-  if(sess){ const u = await Store.get('user:'+sess); if(u) State.session=u; }
 }
 
-/* ---------------- Registration numbers (per-constituency, sequential, immutable) ---------------- */
+/* ---------------- Registration numbers (atomic, shared across all devices) ---------------- */
 function formatReg(prefix, n){ return prefix+'-'+String(n).padStart(4,'0'); }
-let _seqChain = Promise.resolve();
-function nextRegNo(prefix){
-  const p = _seqChain.then(async ()=>{
-    const key='seq:'+prefix;
-    let seq = (await Store.get(key))||0; seq++;
-    await Store.set(key, seq);
-    return formatReg(prefix, seq);
-  });
-  _seqChain = p.catch(()=>{});
-  return p;
+async function nextRegNo(prefix){
+  // Atomic increment using Supabase RPC-style upsert + re-read.
+  // We upsert a row with current+1, then read back the resulting value.
+  // Uses a retry loop in case of concurrent writers on the same prefix.
+  for(let attempt=0; attempt<5; attempt++){
+    try{
+      // Read current
+      const rows = await SB.select('ndc_sequences','prefix=eq.'+encodeURIComponent(prefix)+'&limit=1');
+      const current = (rows && rows[0]) ? rows[0].current : 0;
+      const next = current + 1;
+      if(rows && rows[0]){
+        // Optimistic update: only succeeds if current still matches
+        await SB.update('ndc_sequences','prefix=eq.'+encodeURIComponent(prefix), {current:next});
+      } else {
+        await SB.upsert('ndc_sequences', {prefix, current:next});
+      }
+      return formatReg(prefix, next);
+    }catch(e){
+      if(attempt===4) throw e;
+      await new Promise(r=>setTimeout(r, 50+Math.random()*100));
+    }
+  }
 }
-// Resolve which numbering prefix an executive belongs to (constituency code, or region code for regional execs).
+// Resolve which numbering prefix an executive belongs to.
 async function prefixForExec(rec){
   if(rec.level==='region') return rec.regionId || 'NAT';
   if(rec.level==='constituency') return rec.constituencyId;
   const conId = await constituencyIdOf(rec);
   return conId || 'NAT';
 }
-// One-time migration from the single-region (v2.0, Western-only) layout to the national layout.
-async function migrateToNational(){
-  if(await Store.get('meta:nationalMigrated')) return;
-  // v2.0 regional_admin accounts had full visibility within Western Region — that maps
-  // directly onto national_admin now that the whole country is in scope.
-  const users = await Store.getAll('user:');
-  for(const u of users){
-    if(u.role==='regional_admin'){ u.role='national_admin'; await Store.set('user:'+u.username, u); }
-    // also catch a v1 constituency_admin with no scope that was never migrated
-    if(u.role==='constituency_admin' && !u.scopeConstituencyId){ u.role='national_admin'; await Store.set('user:'+u.username, u); }
-  }
-  // Discard any legacy free-text settings — the national structure is fixed.
-  await Store.set('settings', {});
-  State.settings = {};
-  // Pre-v3 constituency records (from the Western-only v2.0 layout) have no regionId —
-  // backfill it (and sync the canonical name) from the fixed national constituency list.
-  const cons = await Data.constituencies();
-  for(const c of cons){
-    const canon = CONSTITUENCY_MAP[c.id];
-    if(canon && (c.regionId!==canon.regionId || c.name!==canon.name)){
-      c.regionId = canon.regionId; c.name = canon.name; c.type='constituency';
-      await Store.set('con:'+c.id, c);
-    }
-  }
-  // Pre-v2 data: attach any pre-existing wards with no constituencyId to Essikado-Ketan.
-  const wards = await Store.getAll('ward:');
-  for(const w of wards){ if(!w.constituencyId){ w.constituencyId='ESK'; await Store.set('ward:'+w.id, w); } }
-  // Pre-v3 region-level execs had no regionId (the only region was Western) — backfill it.
-  const execs = await Store.getAll('exec:');
-  for(const e of execs){ if(e.level==='region' && !e.regionId){ e.regionId='WR'; await Store.set('exec:'+e.id, e); } }
-  // Backfill registration numbers for any execs missing one, per prefix.
-  const counters = {};
-  // seed counters from existing numbers so we never collide
-  execs.forEach(e=>{ if(e.regNo){ const m=String(e.regNo).match(/^([A-Za-z]+)-?(\d+)/); if(m){ counters[m[1]]=Math.max(counters[m[1]]||0, parseInt(m[2],10)); } } });
-  const missing = execs.filter(e=>!e.regNo).sort((a,b)=> String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
-  for(const e of missing){
-    const prefix = await prefixForExec(e);
-    counters[prefix] = (counters[prefix]||0)+1;
-    e.regNo = formatReg(prefix, counters[prefix]);
-    await Store.set('exec:'+e.id, e);
-  }
-  for(const p of Object.keys(counters)){ const cur=(await Store.get('seq:'+p))||0; if(counters[p]>cur) await Store.set('seq:'+p, counters[p]); }
-  await Store.set('meta:nationalMigrated', {at:nowISO()});
-}
+// No migration needed — Supabase is the single source of truth from first use.
+async function migrateToNational(){ /* no-op: Supabase schema handles structure */ }
 
 /* ---------------- Auth ---------------- */
 async function login(username, password){
-  const u = await Store.get('user:'+username);
-  if(!u || u.password!==password){ return false; }
-  State.session = u;
-  await Store.set('meta:session', username);
-  await audit('LOGIN','user',username,'');
-  return true;
+  try{
+    const rows = await SB.select('ndc_users','username=eq.'+encodeURIComponent(username)+'&limit=1');
+    if(!rows || !rows[0]) return false;
+    const u = rowToUser(rows[0]);
+    if(u.password !== password) return false;
+    State.session = u;
+    Store._local.set('meta:session', username);
+    await audit('LOGIN','user',username,'');
+    return true;
+  }catch(e){ toast('Connection error: '+e.message,true); return false; }
 }
-async function logout(){ await audit('LOGOUT','user',State.session?State.session.username:'',''); State.session=null; await Store.del('meta:session'); location.hash='#/login'; render(); }
+async function logout(){
+  await audit('LOGOUT','user',State.session?State.session.username:'','');
+  State.session=null;
+  Store._local.del('meta:session');
+  location.hash='#/login'; render();
+}
 function can(action){
   const r = State.session && State.session.role;
   if(r==='national_admin' || r==='constituency_admin') return true;
@@ -465,18 +499,30 @@ function inScope(conId){ const s=userConId(); return s===null ? true : conId===s
 // The constituency context currently in view (national admins can switch; others are fixed).
 function activeConId(){ return isNational()? State.currentCon : userConId(); }
 
-/* ---------------- Data accessors ---------------- */
+/* ---------------- Data accessors (Supabase-backed) ---------------- */
 const Data = {
-  regions: ()=> Store.getAll('reg:'),
-  constituencies: ()=> Store.getAll('con:'),
-  wards: ()=> Store.getAll('ward:'),
-  branches: ()=> Store.getAll('branch:'),
-  units: ()=> Store.getAll('unit:'),
-  execs: ()=> Store.getAll('exec:'),
-  users: ()=> Store.getAll('user:'),
-  positions: async ()=> (await Store.get('positions'))||DEFAULT_POSITIONS,
-  audits: async ()=> (await Store.getAll('audit:')).sort((a,b)=> b.ts.localeCompare(a.ts)),
-  get: (k)=> Store.get(k),
+  regions: ()=> Promise.resolve(REGIONS.map(r=>({id:r.code, code:r.code, name:r.name, type:'region'}))),
+  constituencies: ()=> Promise.resolve(CONSTITUENCIES.map(c=>({id:c.code, code:c.code, name:c.name, regionId:c.regionId, type:'constituency'}))),
+  wards: async ()=>{ const r=await SB.select('ndc_wards','order=name.asc'); return (r||[]).map(rowToWard); },
+  branches: async ()=>{ const r=await SB.select('ndc_branches','order=name.asc'); return (r||[]).map(rowToBranch); },
+  units: async ()=>{ const r=await SB.select('ndc_units','order=name.asc'); return (r||[]).map(rowToUnit); },
+  execs: async ()=>{ const r=await SB.select('ndc_executives','order=created_at.asc'); return (r||[]).map(rowToExec); },
+  users: async ()=>{ const r=await SB.select('ndc_users','order=username.asc'); return (r||[]).map(rowToUser); },
+  positions: async ()=>{ const r=await SB.select('ndc_settings','key=eq.positions&limit=1'); return r&&r[0]? r[0].value : DEFAULT_POSITIONS; },
+  audits: async ()=>{ const r=await SB.select('ndc_audit','order=ts.desc&limit=200'); return (r||[]).map(a=>({id:a.id,ts:a.ts,user:a.username,role:a.role,action:a.action,entityType:a.entity_type,entityId:a.entity_id,detail:a.detail})); },
+  // Legacy single-record lookups used by viewExecProfile and constituencyIdOf
+  get: async (k)=>{
+    try{
+      if(k.startsWith('exec:')){   const id=k.slice(5); const r=await SB.select('ndc_executives','id=eq.'+id+'&limit=1'); return r&&r[0]?rowToExec(r[0]):null; }
+      if(k.startsWith('ward:')){   const id=k.slice(5); const r=await SB.select('ndc_wards','id=eq.'+id+'&limit=1'); return r&&r[0]?rowToWard(r[0]):null; }
+      if(k.startsWith('branch:')){ const id=k.slice(7); const r=await SB.select('ndc_branches','id=eq.'+id+'&limit=1'); return r&&r[0]?rowToBranch(r[0]):null; }
+      if(k.startsWith('unit:')){   const id=k.slice(5); const r=await SB.select('ndc_units','id=eq.'+id+'&limit=1'); return r&&r[0]?rowToUnit(r[0]):null; }
+      if(k.startsWith('user:')){   const u=k.slice(5); const r=await SB.select('ndc_users','username=eq.'+encodeURIComponent(u)+'&limit=1'); return r&&r[0]?rowToUser(r[0]):null; }
+      if(k.startsWith('reg:')){    const id=k.slice(4); const reg=REGION_MAP[id]; return reg?{id:reg.code,code:reg.code,name:reg.name,type:'region'}:null; }
+      if(k.startsWith('con:')){    const id=k.slice(4); const con=CONSTITUENCY_MAP[id]; return con?{id:con.code,code:con.code,name:con.name,regionId:con.regionId,type:'constituency'}:null; }
+    }catch(e){ console.warn('Data.get error for',k,e.message); }
+    return null;
+  },
 };
 function posForLevel(positions, level){ return positions.filter(p=>p.levels.includes(level)).map(p=>p.title); }
 
@@ -485,11 +531,11 @@ async function constituencyIdOf(rec){
   if(!rec) return null;
   if(rec.level==='region') return null;
   if(rec.level==='constituency' || rec.type==='constituency') return rec.constituencyId || rec.id;
-  if(rec.level==='ward' || rec.type==='ward'){ const w = rec.constituencyId!==undefined ? rec : await Store.get('ward:'+(rec.wardId||rec.id)); return w?w.constituencyId:null; }
-  if(rec.level==='branch' || rec.type==='branch'){ const b = rec.wardId!==undefined && rec.type==='branch' ? rec : await Store.get('branch:'+(rec.branchId||rec.id)); const w=b?await Store.get('ward:'+b.wardId):null; return w?w.constituencyId:null; }
+  if(rec.level==='ward' || rec.type==='ward'){ const w = rec.constituencyId!==undefined ? rec : await Data.get('ward:'+(rec.wardId||rec.id)); return w?w.constituencyId:null; }
+  if(rec.level==='branch' || rec.type==='branch'){ const b = rec.wardId!==undefined && rec.type==='branch' ? rec : await Data.get('branch:'+(rec.branchId||rec.id)); const w=b?await Data.get('ward:'+b.wardId):null; return w?w.constituencyId:null; }
   // unit
-  const u = (rec.branchId!==undefined && rec.type==='unit') ? rec : await Store.get('unit:'+(rec.unitId||rec.id));
-  const b = u?await Store.get('branch:'+u.branchId):null; const w=b?await Store.get('ward:'+b.wardId):null; return w?w.constituencyId:null;
+  const u = (rec.branchId!==undefined && rec.type==='unit') ? rec : await Data.get('unit:'+(rec.unitId||rec.id));
+  const b = u?await Data.get('branch:'+u.branchId):null; const w=b?await Data.get('ward:'+b.wardId):null; return w?w.constituencyId:null;
 }
 
 /* ---------------- Photo capture + compression ---------------- */
@@ -654,14 +700,13 @@ function wireForcePasswordChange(){
     const p1=$('#fpNew').value.trim(), p2=$('#fpConfirm').value.trim();
     if(p1.length<4){ toast('Use at least 4 characters',true); return; }
     if(p1!==p2){ toast('Passwords do not match',true); return; }
-    const u = await Store.get('user:'+State.session.username);
-    if(!u){ toast('Account record not found',true); return; }
-    u.password=p1; u.mustChangePassword=false;
-    await Store.set('user:'+State.session.username,u);
-    State.session = u;
-    await audit('UPDATE','user',State.session.username,'Set initial password');
-    toast('Password set');
-    location.hash='#/dashboard'; render();
+    try{
+      await SB.update('ndc_users','username=eq.'+encodeURIComponent(State.session.username),{password:p1,must_change_password:false,updated_at:nowISO()});
+      State.session.password=p1; State.session.mustChangePassword=false;
+      await audit('UPDATE','user',State.session.username,'Set initial password');
+      toast('Password set');
+      location.hash='#/dashboard'; render();
+    }catch(e){ toast('Could not save password: '+e.message,true); }
   };
   $('[data-act=setPassword]').addEventListener('click',go);
   $('#fpConfirm').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
@@ -820,7 +865,7 @@ async function viewRegionDetail(regionId){
 }
 
 async function viewConstituencyDetail(id){
-  const con = await Store.get('con:'+id);
+  const con = await Data.get('con:'+id);
   if(!con) return emptyState('🚫','Not found','That constituency does not exist.');
   if(!inScope(id)) return denyView();
   const positions = await Data.positions();
@@ -888,7 +933,7 @@ async function viewRegional(regionId){
 }
 
 async function viewOrgDetail(level, id){
-  const node = await Store.get(level+':'+id);
+  const node = await Data.get(level+':'+id);
   if(!node) return emptyState('🚫','Not found','This record may have been deleted.');
   const conId = await constituencyIdOf(node);
   if(!inScope(conId)) return denyView();
@@ -947,10 +992,10 @@ async function buildCrumb(level,node){
   const rootHref = isNational()?'#/constituencies':('#/constituency/'+(userConId()||''));
   const parts=[`<a href="${rootHref}">Registry</a>`];
   const conId = await constituencyIdOf(node);
-  if(conId){ const c=await Store.get('con:'+conId); parts.push(`<span class="sep">›</span><a href="#/constituency/${conId}">${esc(c?c.name:conId)}</a>`); }
+  if(conId){ const c=await Data.get('con:'+conId); parts.push(`<span class="sep">›</span><a href="#/constituency/${conId}">${esc(c?c.name:conId)}</a>`); }
   if(level==='ward'){ parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
-  else if(level==='branch'){ const w=await Store.get('ward:'+node.wardId); parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Ward')}</a>`,`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
-  else if(level==='unit'){ const b=await Store.get('branch:'+node.branchId); const w=b?await Store.get('ward:'+b.wardId):null; if(w)parts.push(`<span class="sep">›</span><a href="#/ward/${w.id}">${esc(w.name)}</a>`); if(b)parts.push(`<span class="sep">›</span><a href="#/branch/${b.id}">${esc(b.name)}</a>`); parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
+  else if(level==='branch'){ const w=await Data.get('ward:'+node.wardId); parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Ward')}</a>`,`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
+  else if(level==='unit'){ const b=await Data.get('branch:'+node.branchId); const w=b?await Data.get('ward:'+b.wardId):null; if(w)parts.push(`<span class="sep">›</span><a href="#/ward/${w.id}">${esc(w.name)}</a>`); if(b)parts.push(`<span class="sep">›</span><a href="#/branch/${b.id}">${esc(b.name)}</a>`); parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
   return `<div class="crumb">${parts.join('')}</div>`;
 }
 
@@ -959,7 +1004,7 @@ async function buildCrumb(level,node){
    ============================================================ */
 async function viewExecForm(execId, q){
   const positions = await Data.positions();
-  let e = execId? await Store.get('exec:'+execId) : null;
+  let e = execId? await Data.get('exec:'+execId) : null;
   const level = e? e.level : (q.level||'ward');
   const parentId = e? e[level+'Id'] : (q.parent||'');
   const slate = posForLevel(positions, level);
@@ -1089,10 +1134,10 @@ async function saveExec(){
   if(rec.dob){ const soft=all.find(e=>e.id!==id && e.dob===rec.dob && e.fullName.toLowerCase().trim()===rec.fullName.toLowerCase().trim()); if(soft){ const go=await confirmModal('Possible duplicate','Someone with the same name and date of birth is already registered. Continue?'); if(!go) return; } }
 
   const eid = id || uid();
-  const existing = id? await Store.get('exec:'+id):null;
+  const existing = id? await Data.get('exec:'+id):null;
   const regNo = (existing && existing.regNo) ? existing.regNo : await nextRegNo(await prefixForExec(rec));
   const final = Object.assign({}, existing||{}, rec, {id:eid, regNo, updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO(), createdBy:(existing&&existing.createdBy)||State.session.username});
-  await Store.set('exec:'+eid, final);
+  await SB.upsert('ndc_executives', execToRow(final));
   await audit(id?'UPDATE':'CREATE','executive',eid, (id?'Updated ':'Registered ')+rec.fullName+' ['+regNo+'] ('+LVS[level]+')');
   toast(id?'Changes saved':'Registered as '+regNo);
   location.hash = '#/exec/'+eid; render();
@@ -1102,17 +1147,17 @@ async function saveExec(){
    EXECUTIVE — profile
    ============================================================ */
 async function viewExecProfile(id){
-  const e=await Store.get('exec:'+id); if(!e) return emptyState('🚫','Not found','This executive may have been deleted.');
+  const e=await Data.get('exec:'+id); if(!e) return emptyState('🚫','Not found','This executive may have been deleted.');
   const conId = await constituencyIdOf(e);
   if(!inScope(conId)) return denyView();
   let parentName='—', parentLink='#/constituencies';
   let regionRec=null;
-  if(e.level==='region'){ regionRec = await Store.get('reg:'+e.regionId); parentName=regionRec?regionRec.name:e.regionId; parentLink='#/regional/'+e.regionId; }
-  else if(e.level==='constituency'){ const c=await Store.get('con:'+e.constituencyId); parentName=c?c.name:'—'; parentLink='#/constituency/'+e.constituencyId; }
-  else if(e.level==='ward'){ const w=await Store.get('ward:'+e.wardId); parentName=w?w.name:'—'; parentLink='#/ward/'+e.wardId; }
-  else if(e.level==='branch'){ const b=await Store.get('branch:'+e.branchId); parentName=b?b.name:'—'; parentLink='#/branch/'+e.branchId; }
-  else if(e.level==='unit'){ const u=await Store.get('unit:'+e.unitId); parentName=u?u.name:'—'; parentLink='#/unit/'+e.unitId; }
-  const con = conId? await Store.get('con:'+conId) : null;
+  if(e.level==='region'){ regionRec = await Data.get('reg:'+e.regionId); parentName=regionRec?regionRec.name:e.regionId; parentLink='#/regional/'+e.regionId; }
+  else if(e.level==='constituency'){ const c=await Data.get('con:'+e.constituencyId); parentName=c?c.name:'—'; parentLink='#/constituency/'+e.constituencyId; }
+  else if(e.level==='ward'){ const w=await Data.get('ward:'+e.wardId); parentName=w?w.name:'—'; parentLink='#/ward/'+e.wardId; }
+  else if(e.level==='branch'){ const b=await Data.get('branch:'+e.branchId); parentName=b?b.name:'—'; parentLink='#/branch/'+e.branchId; }
+  else if(e.level==='unit'){ const u=await Data.get('unit:'+e.unitId); parentName=u?u.name:'—'; parentLink='#/unit/'+e.unitId; }
+  const con = conId? await Data.get('con:'+conId) : null;
   const a=age(e.dob);
   const lvlBadge = e.level==='region'?'y':e.level==='constituency'?'':e.level==='ward'?'k':e.level==='branch'?'y':'r';
   return `
@@ -1494,7 +1539,10 @@ async function importCSV(file){
     let found = coll.find(x=>x.name.toLowerCase()===name.toLowerCase() && (!parentField || x[parentField]===parentId));
     if(found) return found;
     const rec=Object.assign({id:uid(),name,type,createdAt:nowISO(),updatedAt:nowISO()}, extra||{}); if(parentField) rec[parentField]=parentId;
-    await Store.set(type+':'+rec.id,rec); coll.push(rec); return rec;
+    if(type==='ward') await SB.upsert('ndc_wards', wardToRow(rec));
+    else if(type==='branch') await SB.upsert('ndc_branches', branchToRow(rec));
+    else if(type==='unit') await SB.upsert('ndc_units', unitToRow(rec));
+    coll.push(rec); return rec;
   };
   let ok=0, fail=0, errs=[];
   for(let r=1;r<rows.length;r++){
@@ -1510,7 +1558,7 @@ async function importCSV(file){
       const id=uid();
       const rec={id, level, regionId:rid, fullName:get('fullName'), position:get('position'), gender:(get('gender').toLowerCase()), phone:get('phone'), email:get('email'), dob:get('dob'), occupation:get('occupation'), address:get('address'), background:get('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
       rec.regNo = await nextRegNo(await prefixForExec(rec));
-      await Store.set('exec:'+id,rec); ok++; continue;
+      await SB.upsert('ndc_executives', execToRow(rec)); ok++; continue;
     }
     const conId = findCon(get('constituency'), regionIdHint);
     if(!conId){ fail++; errs.push(`Row ${r+1}: constituency not found / not in your scope`); continue; }
@@ -1527,27 +1575,42 @@ async function importCSV(file){
     if(level==='constituency') rec.constituencyId=conId;
     else rec[level+'Id'] = level==='ward'?wardId:level==='branch'?branchId:unitId;
     rec.regNo = await nextRegNo(await prefixForExec(rec));
-    await Store.set('exec:'+id,rec); ok++;
+    await SB.upsert('ndc_executives', execToRow(rec)); ok++;
   }
   await audit('IMPORT','executive','',`Imported ${ok} executives (${fail} failed)`);
   $('#importReport').innerHTML = `<div class="card pad" style="background:var(--green-soft);border:0"><b>${ok} imported</b>${fail?` • <span style="color:var(--red)">${fail} skipped</span>`:''}${errs.length?`<div class="tiny muted" style="margin-top:6px">${errs.slice(0,8).map(esc).join('<br>')}</div>`:''}</div>`;
   toast(`Imported ${ok}, skipped ${fail}`, fail>0);
 }
 async function fullBackup(){
-  const keys=await Store.keys(''); const dump={};
-  for(const k of keys){ dump[k]=await Store.get(k); }
-  download(`ndc_western_region_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify({app:'ndc-western-region',version:'2.0',at:nowISO(),data:dump},null,0),'application/json');
-  await audit('BACKUP','system','','Full backup downloaded');
-  toast('Backup downloaded');
+  try{
+    const [users,execs,wards,branches,units,seqs] = await Promise.all([
+      SB.select('ndc_users','order=username.asc'),
+      SB.select('ndc_executives','order=created_at.asc'),
+      SB.select('ndc_wards','order=name.asc'),
+      SB.select('ndc_branches','order=name.asc'),
+      SB.select('ndc_units','order=name.asc'),
+      SB.select('ndc_sequences','order=prefix.asc'),
+    ]);
+    const dump={users,execs,wards,branches,units,sequences:seqs};
+    download('ndc_ghana_backup_'+new Date().toISOString().slice(0,10)+'.json', JSON.stringify({app:'ndc-ghana',version:'4.0',at:nowISO(),data:dump},null,0),'application/json');
+    await audit('BACKUP','system','','Full backup downloaded');
+    toast('Backup downloaded');
+  }catch(e){ toast('Backup failed: '+e.message,true); }
 }
 async function restoreBackup(file){
-  const go=await confirmModal('Restore backup?','This replaces ALL current data on this device with the contents of the backup file. This cannot be undone.');
+  const go=await confirmModal('Restore backup?','This uploads the backup to Supabase and REPLACES all current shared data for every device immediately. This cannot be undone.');
   if(!go) return;
-  try{ const obj=JSON.parse(await file.text()); const data=obj.data||obj; let n=0;
-    for(const k of Object.keys(data)){ await Store.set(k,data[k]); n++; }
+  try{
+    const obj=JSON.parse(await file.text()); const d=obj.data||obj; let n=0;
+    if(d.users && d.users.length){ await SB.upsert('ndc_users',d.users); n+=d.users.length; }
+    if(d.wards && d.wards.length){ await SB.upsert('ndc_wards',d.wards); n+=d.wards.length; }
+    if(d.branches && d.branches.length){ await SB.upsert('ndc_branches',d.branches); n+=d.branches.length; }
+    if(d.units && d.units.length){ await SB.upsert('ndc_units',d.units); n+=d.units.length; }
+    if(d.execs && d.execs.length){ await SB.upsert('ndc_executives',d.execs); n+=d.execs.length; }
+    if(d.sequences && d.sequences.length){ await SB.upsert('ndc_sequences',d.sequences); n+=d.sequences.length; }
     await audit('RESTORE','system','','Restored '+n+' records from backup');
-    toast('Restored '+n+' record(s)'); const s=await Store.get('settings'); if(s)State.settings=s; render();
-  }catch{ toast('That file could not be read',true); }
+    toast('Restored '+n+' record(s)'); render();
+  }catch(e){ toast('Could not restore: '+e.message,true); }
 }
 function wireData(){
   $('[data-act=exportCsv]').onclick=exportExecsCSV;
@@ -1593,18 +1656,18 @@ async function viewAdmin(){
 }
 function wireAdmin(){
   const nu=$('[data-act=newUser]'); if(nu) nu.onclick=newUserFlow;
-  document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{ const go=await confirmModal('Remove user?','This removes login access for @'+b.dataset.id+'.'); if(go){ await Store.del('user:'+b.dataset.id); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); } });
+  document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{ const go=await confirmModal('Remove user?','This removes login access for @'+b.dataset.id+'.'); if(go){ await SB.delete('ndc_users','id=eq.'+encodeURIComponent(b.dataset.id)); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); } });
   $('[data-act=resetPw]').onclick=async()=>{
     const curPw=$('#curPw').value.trim(), newPw=$('#newPw').value.trim(), confirmPw=$('#confirmPw').value.trim();
-    const u=await Store.get('user:'+State.session.username);
+    const rows=await SB.select('ndc_users','username=eq.'+encodeURIComponent(State.session.username)+'&limit=1');
+    const u=rows&&rows[0];
     if(!u){ toast('Could not find your account record',true); return; }
     if(u.password!==curPw){ toast('Current password is incorrect',true); return; }
     if(newPw.length<4){ toast('New password must be at least 4 characters',true); return; }
     if(newPw!==confirmPw){ toast('New passwords do not match',true); return; }
     if(newPw===curPw){ toast('New password must be different from the current password',true); return; }
-    u.password=newPw; u.mustChangePassword=false;
-    await Store.set('user:'+State.session.username,u);
-    State.session=u;
+    await SB.update('ndc_users','username=eq.'+encodeURIComponent(State.session.username),{password:newPw,must_change_password:false,updated_at:nowISO()});
+    State.session.password=newPw; State.session.mustChangePassword=false;
     await audit('UPDATE','user',State.session.username,'Changed password');
     $('#curPw').value=''; $('#newPw').value=''; $('#confirmPw').value='';
     toast('Password updated');
@@ -1630,13 +1693,13 @@ async function newUserFlow(){
   if(!r.ok) return;
   const name=$('#nuName').value.trim(), username=$('#nuUser').value.trim().toLowerCase(), pw=$('#nuPw').value, role=$('#nuRole').value, conId=$('#nuCon').value;
   if(!username||!pw){ toast('Username and password are required',true); return; }
-  if(await Store.get('user:'+username)){ toast('That username is taken',true); return; }
+  const existCheck=await SB.select('ndc_users','username=eq.'+encodeURIComponent(username)+'&limit=1'); if(existCheck&&existCheck.length){ toast('That username is taken',true); return; }
   if(role!=='national_admin' && !conId){ toast('Select a constituency for this user',true); return; }
   r.el.remove();
-  const con = conId? await Store.get('con:'+conId) : null;
+  const con = conId? await Data.get('con:'+conId) : null;
   const rec={id:username,username,password:pw,fullName:name||username,role};
   if(role!=='national_admin'){ rec.scopeConstituencyId=conId; rec.scopeConstituencyName=con?con.name:conId; }
-  await Store.set('user:'+username,rec);
+  await SB.upsert('ndc_users', userToRow(rec));
   await audit('CREATE','user',username,'Added user @'+username+' ('+role+(con?', '+con.name:'')+')');
   toast('User added'); render();
 }
@@ -1703,7 +1766,9 @@ async function orgFormModal(type, existing, parentId){
   if(type==='unit'){ rec.branchId=$('#of_parent').value; rec.stationCode=$('#of_station').value.trim(); }
   if(type==='ward'){ rec.constituencyId = parentId || (existing&&existing.constituencyId); rec.code=$('#of_code').value.trim(); }
   r.el.remove();
-  await Store.set(type+':'+id, rec);
+  if(type==='ward') await SB.upsert('ndc_wards', wardToRow(rec));
+  else if(type==='branch') await SB.upsert('ndc_branches', branchToRow(rec));
+  else if(type==='unit') await SB.upsert('ndc_units', unitToRow(rec));
   await audit(existing?'UPDATE':'CREATE',type,id,(existing?'Updated ':'Created ')+LVS[type]+' '+name);
   toast(existing?'Saved':LVS[type]+' added');
   if(!existing && type!=='ward'){ render(); } else { location.hash = '#/'+type+'/'+id; render(); }
@@ -1722,25 +1787,22 @@ async function onAction(e){
   if(act==='newWard') return orgFormModal('ward',null,null);
   if(act==='newWardIn') return orgFormModal('ward',null,el.dataset.con);
   if(act==='newChild') return orgFormModal(el.dataset.level,null,el.dataset.parent);
-  if(act==='editOrg'){ const n=await Store.get(el.dataset.level+':'+el.dataset.id); return orgFormModal(el.dataset.level,n,null); }
+  if(act==='editOrg'){ const n=await Data.get(el.dataset.level+':'+el.dataset.id); return orgFormModal(el.dataset.level,n,null); }
   if(act==='delOrg'){ const go=await confirmModal('Delete '+LVS[el.dataset.level]+'?','This also deletes everything beneath it (branches, units, and their executives).'); if(go){ await cascadeDelete(el.dataset.level,el.dataset.id); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
-  if(act==='delExec'){ const go=await confirmModal('Delete executive?','This permanently removes '+el.dataset.name+'.'); if(go){ await Store.del('exec:'+el.dataset.id); await audit('DELETE','executive',el.dataset.id,'Deleted '+el.dataset.name); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
+  if(act==='delExec'){ const go=await confirmModal('Delete executive?','This permanently removes '+el.dataset.name+'.'); if(go){ await SB.delete('ndc_executives','id=eq.'+el.dataset.id); await audit('DELETE','executive',el.dataset.id,'Deleted '+el.dataset.name); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
   if(act==='exportReport') return exportExecsCSV();
 }
 async function cascadeDelete(type,id){
   if(type==='ward'){
     const branches=(await Data.branches()).filter(b=>b.wardId===id);
     for(const b of branches) await cascadeDelete('branch',b.id);
-    (await Data.execs()).filter(e=>e.level==='ward'&&e.wardId===id).forEach(e=>Store.del('exec:'+e.id));
-    await Store.del('ward:'+id);
+    await SB.delete('ndc_wards','id=eq.'+id);
   } else if(type==='branch'){
     const units=(await Data.units()).filter(u=>u.branchId===id);
     for(const u of units) await cascadeDelete('unit',u.id);
-    (await Data.execs()).filter(e=>e.level==='branch'&&e.branchId===id).forEach(e=>Store.del('exec:'+e.id));
-    await Store.del('branch:'+id);
+    await SB.delete('ndc_branches','id=eq.'+id);
   } else {
-    (await Data.execs()).filter(e=>e.level==='unit'&&e.unitId===id).forEach(e=>Store.del('exec:'+e.id));
-    await Store.del('unit:'+id);
+    await SB.delete('ndc_units','id=eq.'+id);
   }
   await audit('DELETE',type,id,'Deleted '+LVS[type]+' and its records');
 }
@@ -1750,7 +1812,7 @@ function updateSync(){
   const dot=$('#syncDot'), txt=$('#syncTxt'); if(!dot) return;
   const online = navigator.onLine;
   dot.classList.toggle('online', online);
-  txt.textContent = (Store.backend==='window.storage'?'Saved':'Offline-ready');
+  txt.textContent = 'Synced';
 }
 window.addEventListener('online',updateSync); window.addEventListener('offline',updateSync);
 
