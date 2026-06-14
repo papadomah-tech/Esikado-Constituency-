@@ -19,6 +19,8 @@ create table if not exists ndc_users (
   scope_constituency_id   text,
   scope_constituency_name text,
   must_change_password    boolean not null default false,
+  suspended     boolean not null default false,
+  created_by    text,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
@@ -186,4 +188,12 @@ create index if not exists idx_audit_ts              on ndc_audit(ts desc);
 -- was applied before this column existed. Safe to re-run.
 -- -----------------------------------------------------------------
 alter table ndc_executives add column if not exists member_id text;
+
+-- -----------------------------------------------------------------
+-- Migration for existing deployments: add suspended flag and creator
+-- tracking to ndc_users. Safe to re-run.
+-- -----------------------------------------------------------------
+alter table ndc_users add column if not exists suspended boolean not null default false;
+alter table ndc_users add column if not exists created_by text;
+
 notify pgrst, 'reload schema';

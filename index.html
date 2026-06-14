@@ -314,10 +314,10 @@ function rowToBranch(r){ return {id:r.id, name:r.name, wardId:r.ward_id, type:'b
 function unitToRow(u){ return {id:u.id, name:u.name, branch_id:u.branchId, created_at:u.createdAt||new Date().toISOString(), updated_at:u.updatedAt||new Date().toISOString(), created_by:u.createdBy||null}; }
 function rowToUnit(r){ return {id:r.id, name:r.name, branchId:r.branch_id, type:'unit', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function userToRow(u){
-  return {id:u.id||u.username, username:u.username, password:u.password, full_name:u.fullName||u.username, role:u.role, scope_constituency_id:u.scopeConstituencyId||null, scope_constituency_name:u.scopeConstituencyName||null, must_change_password:u.mustChangePassword||false, updated_at:new Date().toISOString()};
+  return {id:u.id||u.username, username:u.username, password:u.password, full_name:u.fullName||u.username, role:u.role, scope_constituency_id:u.scopeConstituencyId||null, scope_constituency_name:u.scopeConstituencyName||null, must_change_password:u.mustChangePassword||false, suspended:u.suspended||false, created_by:u.createdBy||null, updated_at:new Date().toISOString()};
 }
 function rowToUser(r){
-  return {id:r.id, username:r.username, password:r.password, fullName:r.full_name, role:r.role, scopeConstituencyId:r.scope_constituency_id, scopeConstituencyName:r.scope_constituency_name, mustChangePassword:r.must_change_password||false};
+  return {id:r.id, username:r.username, password:r.password, fullName:r.full_name, role:r.role, scopeConstituencyId:r.scope_constituency_id, scopeConstituencyName:r.scope_constituency_name, mustChangePassword:r.must_change_password||false, suspended:r.suspended||false, createdBy:r.created_by};
 }
 
 // ---- Store shim — same API as before, backed by Supabase ----
@@ -430,7 +430,11 @@ async function bootstrap(){
   if(sess){
     try{
       const rows = await SB.select('ndc_users','username=eq.'+encodeURIComponent(sess)+'&limit=1');
-      if(rows && rows[0]) State.session = rowToUser(rows[0]);
+      if(rows && rows[0]){
+        const u = rowToUser(rows[0]);
+        if(u.suspended){ Store._local.del('meta:session'); }
+        else State.session = u;
+      }
     }catch(e){ console.warn('Session restore error:',e.message); }
   }
 }
@@ -474,14 +478,15 @@ async function migrateToNational(){ /* no-op: Supabase schema handles structure 
 async function login(username, password){
   try{
     const rows = await SB.select('ndc_users','username=eq.'+encodeURIComponent(username)+'&limit=1');
-    if(!rows || !rows[0]) return false;
+    if(!rows || !rows[0]) return 'invalid';
     const u = rowToUser(rows[0]);
-    if(u.password !== password) return false;
+    if(u.password !== password) return 'invalid';
+    if(u.suspended) return 'suspended';
     State.session = u;
     Store._local.set('meta:session', username);
     await audit('LOGIN','user',username,'');
-    return true;
-  }catch(e){ toast('Connection error: '+e.message,true); return false; }
+    return 'ok';
+  }catch(e){ toast('Connection error: '+e.message,true); return 'error'; }
 }
 async function logout(){
   await audit('LOGOUT','user',State.session?State.session.username:'','');
@@ -683,7 +688,7 @@ function viewLogin(){
   </div>`;
 }
 function wireLogin(){
-  const go = async ()=>{ const u=$('#lu').value.trim(), p=$('#lp').value; if(!u||!p){ toast('Enter username and password',true); return; } const ok=await login(u,p); if(ok){ location.hash='#/dashboard'; render(); } else toast('Wrong username or password',true); };
+  const go = async ()=>{ const u=$('#lu').value.trim(), p=$('#lp').value; if(!u||!p){ toast('Enter username and password',true); return; } const status=await login(u,p); if(status==='ok'){ location.hash='#/dashboard'; render(); } else if(status==='suspended'){ toast('This account has been suspended. Contact your administrator.',true); } else if(status==='invalid'){ toast('Wrong username or password',true); } };
   $('[data-act=dologin]').addEventListener('click',go);
   $('#lp').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
   $('#lu').focus();
@@ -1644,24 +1649,49 @@ function wireData(){
    ============================================================ */
 async function viewAdmin(){
   const g = await loadGraph();
-  const users=await Data.users();
+  const national = isNational();
+  const ownCon = userConId();
+  const allUsers = await Data.users();
   const conName = (cid)=> cid? ((g.cMap[cid]||{}).name||cid) : '—';
+
+  // Scope the user list and coverage card
+  let users, coverageHtml;
+  if(national){
+    users = allUsers;
+    coverageHtml = `<p class="muted small" style="margin:0">${esc(NATION_NAME)} • ${g.regions.length} regions • ${g.cons.length} constituencies (fixed national structure)</p>`;
+  } else {
+    // Constituency admin: accounts scoped to this constituency, regardless of who created them
+    users = allUsers.filter(u=>u.scopeConstituencyId===ownCon);
+    const wards = g.wards.filter(w=>w.constituencyId===ownCon);
+    const branches = g.branches.filter(b=>(g.wMap[b.wardId]||{}).constituencyId===ownCon);
+    const units = g.units.filter(u=>{const b=g.bMap[u.branchId];return b&&(g.wMap[b.wardId]||{}).constituencyId===ownCon;});
+    coverageHtml = `<p class="muted small" style="margin:0">${esc(conName(ownCon))} • ${wards.length} ward(s) • ${branches.length} branch(es) • ${units.length} unit(s)</p>`;
+  }
+
+  const roleBadge = (role)=> role==='national_admin'?'y':role==='constituency_admin'?'':'k';
+  const canManage = (u)=> national ? u.username!=='admin' : (u.username!==State.session.username);
 
   return `
   <div class="section-head"><h2>Administration</h2></div>
 
   <div class="card pad">
     <h3 style="font-size:15px;margin-bottom:4px">Coverage</h3>
-    <p class="muted small" style="margin:0">${esc(NATION_NAME)} • ${g.regions.length} regions • ${g.cons.length} constituencies (fixed national structure)</p>
+    ${coverageHtml}
   </div>
 
   <div class="card pad" style="margin-top:14px">
-    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span>${isNational()?`<button class="btn sm primary" data-act="newUser">＋ User</button>`:''}</div>
-    <div class="list">${users.map(u=>`
+    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span><button class="btn sm primary" data-act="newUser">＋ User</button></div>
+    ${users.length? `<div class="list">`+users.map(u=>`
       <div class="item"><div class="av">${initials(u.fullName||u.username)}</div>
-        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${u.role==='national_admin'?'y':u.role==='constituency_admin'?'':'k'}">${esc(u.role.replace(/_/g,' '))}</span></div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}</div></div>
-        ${(isNational()&&u.username!=='admin')?`<button class="btn sm danger" data-act="delUser" data-id="${esc(u.username)}">✕</button>`:(u.username==='admin'?'<span class="tiny muted">primary</span>':'')}
-      </div>`).join('')}</div>
+        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${roleBadge(u.role)}">${esc(u.role.replace(/_/g,' '))}</span>${u.suspended?' <span class="badge r">suspended</span>':''}</div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}</div></div>
+        ${canManage(u)?`
+        <div class="row" style="gap:6px;flex:0 0 auto">
+          <button class="btn sm" data-act="toggleSuspend" data-id="${esc(u.username)}" data-suspended="${u.suspended?'1':'0'}" title="${u.suspended?'Unsuspend':'Suspend'}">${u.suspended?'▶':'⏸'}</button>
+          <button class="btn sm" data-act="resetUser" data-id="${esc(u.username)}" title="Reset password">⟲</button>
+          <button class="btn sm danger" data-act="delUser" data-id="${esc(u.username)}" title="Delete">✕</button>
+        </div>
+        `:(u.username==='admin'?'<span class="tiny muted">primary</span>':'<span class="tiny muted">you</span>')}
+      </div>`).join('')+`</div>` : `<p class="muted small">No accounts yet for this constituency. Use ＋ User to add one.</p>`}
   </div>
 
   <div class="card pad" style="margin-top:14px">
@@ -1671,7 +1701,37 @@ async function viewAdmin(){
 }
 function wireAdmin(){
   const nu=$('[data-act=newUser]'); if(nu) nu.onclick=newUserFlow;
-  document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{ const go=await confirmModal('Remove user?','This removes login access for @'+b.dataset.id+'.'); if(go){ await SB.delete('ndc_users','id=eq.'+encodeURIComponent(b.dataset.id)); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); } });
+
+  document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{
+    const go=await confirmModal('Remove user?','This permanently removes login access for @'+b.dataset.id+'. This cannot be undone.');
+    if(go){ await SB.delete('ndc_users','id=eq.'+encodeURIComponent(b.dataset.id)); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); }
+  });
+
+  document.querySelectorAll('[data-act=toggleSuspend]').forEach(b=>b.onclick=async()=>{
+    const suspended = b.dataset.suspended==='1';
+    const action = suspended?'Unsuspend':'Suspend';
+    const go=await confirmModal(action+' user?', suspended
+      ? 'This restores login access for @'+b.dataset.id+'.'
+      : 'This immediately blocks @'+b.dataset.id+' from logging in. They will see a message that their account has been suspended.');
+    if(!go) return;
+    await SB.update('ndc_users','id=eq.'+encodeURIComponent(b.dataset.id),{suspended:!suspended,updated_at:nowISO()});
+    await audit('UPDATE','user',b.dataset.id,(suspended?'Unsuspended':'Suspended')+' user @'+b.dataset.id);
+    toast('User '+(suspended?'unsuspended':'suspended')); render();
+  });
+
+  document.querySelectorAll('[data-act=resetUser]').forEach(b=>b.onclick=async()=>{
+    const body=`
+      <p class="muted small" style="margin:0 0 10px">Set a new temporary password for @${esc(b.dataset.id)}. They will be required to choose their own password the next time they sign in.</p>
+      <div class="field"><label>Temporary password</label><input id="ruPw" type="password"></div>`;
+    const r=await modalForm('Reset password',body);
+    if(!r.ok) return;
+    const pw=$('#ruPw').value;
+    if(!pw||pw.length<4){ toast('Enter a temporary password of at least 4 characters',true); return; }
+    r.el.remove();
+    await SB.update('ndc_users','id=eq.'+encodeURIComponent(b.dataset.id),{password:pw,must_change_password:true,updated_at:nowISO()});
+    await audit('UPDATE','user',b.dataset.id,'Reset password for @'+b.dataset.id);
+    toast('Password reset — user must set a new password at next sign in');
+  });
 }
 
 /* ============================================================
@@ -1718,30 +1778,45 @@ function wireAccount(){
 }
 async function newUserFlow(){
   const g = await loadGraph();
-  const regions = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name));
-  const conGroups = regions.map(r=>`<optgroup label="${esc(r.name)}">${g.cons.filter(c=>c.regionId===r.id).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</optgroup>`).join('');
+  const national = isNational();
+  const ownCon = userConId();
+  let conField, roleOptions;
+  if(national){
+    const regions = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    const conGroups = regions.map(r=>`<optgroup label="${esc(r.name)}">${g.cons.filter(c=>c.regionId===r.id).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</optgroup>`).join('');
+    conField = `<div class="field" id="nuConField"><label>Constituency</label><select id="nuCon"><option value="">Select…</option>${conGroups}</select></div>`;
+    roleOptions = `
+      <option value="constituency_admin">Constituency Admin</option>
+      <option value="ward_admin">Ward Admin</option>
+      <option value="branch_admin">Branch Admin</option>
+      <option value="viewer">Viewer</option>
+      <option value="national_admin">National Admin</option>`;
+  } else {
+    const conName = (g.cMap[ownCon]||{}).name||ownCon;
+    conField = `<input type="hidden" id="nuCon" value="${esc(ownCon)}"><p class="muted small" style="margin:-4px 0 8px">This account will be created for ${esc(conName)}.</p>`;
+    roleOptions = `
+      <option value="constituency_admin">Constituency Admin</option>
+      <option value="ward_admin">Ward Admin</option>
+      <option value="branch_admin">Branch Admin</option>
+      <option value="viewer">Viewer</option>`;
+  }
   const body=`
     <div class="field"><label>Full name</label><input id="nuName"></div>
     <div class="field"><label>Username</label><input id="nuUser"></div>
     <div class="field"><label>Temporary password</label><input id="nuPw" type="password"></div>
     <p class="muted small" style="margin:-4px 0 8px">The new user will be required to set their own password the first time they sign in.</p>
-    <div class="field"><label>Role</label><select id="nuRole">
-      <option value="constituency_admin">Constituency Admin</option>
-      <option value="ward_admin">Ward Admin</option>
-      <option value="branch_admin">Branch Admin</option>
-      <option value="viewer">Viewer</option>
-      <option value="national_admin">National Admin</option>
-    </select></div>
-    <div class="field" id="nuConField"><label>Constituency</label><select id="nuCon"><option value="">Select…</option>${conGroups}</select></div>`;
+    <div class="field"><label>Role</label><select id="nuRole">${roleOptions}</select></div>
+    ${conField}`;
   const r=await modalForm('Add user',body);
   if(!r.ok) return;
   const name=$('#nuName').value.trim(), username=$('#nuUser').value.trim().toLowerCase(), pw=$('#nuPw').value, role=$('#nuRole').value, conId=$('#nuCon').value;
   if(!username||!pw){ toast('Username and password are required',true); return; }
   const existCheck=await SB.select('ndc_users','username=eq.'+encodeURIComponent(username)+'&limit=1'); if(existCheck&&existCheck.length){ toast('That username is taken',true); return; }
   if(role!=='national_admin' && !conId){ toast('Select a constituency for this user',true); return; }
+  if(!national && conId!==ownCon){ toast('You can only create accounts for your own constituency',true); return; }
   r.el.remove();
   const con = conId? await Data.get('con:'+conId) : null;
-  const rec={id:username,username,password:pw,fullName:name||username,role,mustChangePassword:true};
+  const rec={id:username,username,password:pw,fullName:name||username,role,mustChangePassword:true,createdBy:State.session.username};
   if(role!=='national_admin'){ rec.scopeConstituencyId=conId; rec.scopeConstituencyName=con?con.name:conId; }
   await SB.upsert('ndc_users', userToRow(rec));
   await audit('CREATE','user',username,'Added user @'+username+' ('+role+(con?', '+con.name:'')+')');
