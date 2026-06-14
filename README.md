@@ -72,13 +72,13 @@ Region codes and constituency codes are also kept distinct from each other natio
 
 - Five-level registry (Region, Constituency, Ward, Branch, Unit) with drill-down and breadcrumb navigation, scoped to the signed-in user's access. National Admins start at a list of 16 regions, drill into a region to see its constituencies and region executives, then into a constituency for its wards.
 - National dashboard with a per-region roll-up of executive counts (16 rows); constituency dashboard for scoped users.
-- Executive records with mandatory passport photo (camera or gallery), auto-compressed before saving.
+- Executive records with mandatory passport photo (camera or gallery) and mandatory NDC member ID number, auto-compressed photo before saving.
 - Full validation, phone-based and name plus date-of-birth duplicate detection.
-- Search across all levels with region and constituency filters (grouped by region), level, gender, and sort filters, including search by registration number.
+- Search across all levels with region and constituency filters (grouped by region), level, gender, and sort filters, including search by registration number or NDC member ID.
 - Reports: gender distribution across all five levels, coverage gaps, totals (regions, constituencies, wards, branches, units), CSV export, scoped to the user's access.
 - Photo album report: passport photos in a grid, grouped by region for region-level executives and by constituency (with region shown) elsewhere in the national view, or by location in a scoped view, filterable by region and constituency, with a print or save-as-PDF layout for A4.
-- Data tools: CSV export and import with `region` and `constituency` columns (regions and constituencies matched by name or code, with the region column used to disambiguate duplicate constituency names; wards, branches, and units matched by name and created if missing, with the correct registration prefix assigned automatically), full backup and restore as a single JSON file.
-- Audit trail of every create, update, delete, import, export, and login.
+- Data tools: CSV export and import with `region`, `constituency`, and `memberId` columns (regions and constituencies matched by name or code, with the region column used to disambiguate duplicate constituency names; wards, branches, and units matched by name and created if missing, with the correct registration prefix assigned automatically), full backup and restore as a single JSON file.
+- Audit trail of every create, update, delete, import, export, and login. The National Admin sees activity from every user; all other users see only their own activity, both on the dashboard and the Activity tab.
 - Installable and fully usable offline.
 
 ## Deploy to GitHub Pages
@@ -133,14 +133,14 @@ If this app is replacing a v1 (single-constituency, Keten Esikado) install, the 
 
 ## How data is stored
 
-Data lives on the device, in the browser database (IndexedDB). Nothing leaves the phone or laptop it was entered on. This makes the app instant and fully offline, but it also means each device holds its own separate registry.
+All registry data, including user accounts, executives and their photos, wards, branches, units, registration number sequences, and the activity log, is stored centrally in Supabase (Postgres). Every device that opens the app reads and writes the same shared data in real time, so an executive registered on one phone is immediately visible on every other device. The browser itself only keeps a small marker of which user is currently signed in, so a page refresh does not log you out; no registry records are stored in the browser.
 
-To consolidate across devices, use **Data, Download full backup** on one device and **Restore from backup** on another, or move to the shared cloud backend described below.
+`supabase_schema.sql` sets up the database. If you already have this app deployed and are updating to a newer version of `index.html`, check the bottom of `supabase_schema.sql` for any new migration statements (for example, new columns added to the executives table) and re-run the whole file in the Supabase SQL editor; statements are written to be safe to re-run.
 
 ## Moving to multi-device sync and real accounts
 
-The storage layer in `index.html` is a small async key-value interface (`Store.get`, `set`, `del`, `keys`). It currently talks to IndexedDB. To get real multi-user accounts, scoped permissions, and live sync across phones, regions, and constituencies, point that same interface at Supabase using the schema and steps in the architecture spec and deployment guide. The user interface does not change; only the four `Store` methods do. Until then, treat the in-app accounts as device-local.
+This is already done as of v4.0: the app reads and writes Supabase directly via its REST API (`SUPABASE_URL` and the anon key are set near the top of `index.html`). User accounts, executive records, and the rest of the registry are shared across every device automatically. No further setup is needed beyond running `supabase_schema.sql` once against your Supabase project.
 
 ## Note on the architecture
 
-This is version 3.0 of the system described in the architecture document, extended from a single-region registry (Western Region, 17 constituencies) to a national registry covering all 16 regions and 276 constituencies of Ghana, with national-level and constituency-level access (no separate regional-admin tier). It keeps the same zero-build, single-file design as earlier versions, with the same offline-first storage layer, now organised around a national five-level hierarchy with unique per-constituency and per-region registration numbering. The Supabase migration path above is how to grow into a full client-server design when shared, authenticated, real-time data across all 276 constituencies is needed.
+This is version 4.0 of the system, extended from a single-region registry (Western Region, 17 constituencies, device-local storage) to a national registry covering all 16 regions and 276 constituencies of Ghana, with national-level and constituency-level access (no separate regional-admin tier), backed by a shared Supabase database for real-time multi-device sync. The 16 regions and 276 constituencies remain fixed constants in the app code, since they never change; everything else (users, executives, wards, branches, units, registration sequences, audit log) lives in Supabase.

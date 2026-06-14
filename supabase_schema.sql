@@ -116,6 +116,7 @@ create table if not exists ndc_executives (
   branch_id        text references ndc_branches(id) on delete set null,
   unit_id          text references ndc_units(id) on delete set null,
   full_name        text not null,
+  member_id        text,                   -- NDC party membership ID number
   position         text not null,
   gender           text,
   phone            text,
@@ -179,3 +180,10 @@ create index if not exists idx_wards_constituency    on ndc_wards(constituency_i
 create index if not exists idx_branches_ward         on ndc_branches(ward_id);
 create index if not exists idx_units_branch          on ndc_units(branch_id);
 create index if not exists idx_audit_ts              on ndc_audit(ts desc);
+
+-- -----------------------------------------------------------------
+-- Migration for existing deployments: add member_id if this schema
+-- was applied before this column existed. Safe to re-run.
+-- -----------------------------------------------------------------
+alter table ndc_executives add column if not exists member_id text;
+notify pgrst, 'reload schema';

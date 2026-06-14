@@ -280,7 +280,7 @@ function execToRow(e){
     ward_id: e.wardId||null,
     branch_id: e.branchId||null,
     unit_id: e.unitId||null,
-    full_name: e.fullName, position: e.position,
+    full_name: e.fullName, member_id: e.memberId||null, position: e.position,
     gender: e.gender||null, phone: e.phone||null, email: e.email||null,
     dob: e.dob||null, occupation: e.occupation||null,
     address: e.address||null, background: e.background||null,
@@ -295,7 +295,7 @@ function rowToExec(r){
   return {
     id:r.id, level:r.level, regionId:r.region_id, constituencyId:r.constituency_id,
     wardId:r.ward_id, branchId:r.branch_id, unitId:r.unit_id,
-    fullName:r.full_name, position:r.position, gender:r.gender, phone:r.phone,
+    fullName:r.full_name, memberId:r.member_id, position:r.position, gender:r.gender, phone:r.phone,
     email:r.email, dob:r.dob, occupation:r.occupation, address:r.address,
     background:r.background, photo:r.photo, regNo:r.reg_no, status:r.status,
     createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by,
@@ -507,7 +507,12 @@ const Data = {
   execs: async ()=>{ const r=await SB.select('ndc_executives','order=created_at.asc'); return (r||[]).map(rowToExec); },
   users: async ()=>{ const r=await SB.select('ndc_users','order=username.asc'); return (r||[]).map(rowToUser); },
   positions: async ()=>{ const r=await SB.select('ndc_settings','key=eq.positions&limit=1'); return r&&r[0]? r[0].value : DEFAULT_POSITIONS; },
-  audits: async ()=>{ const r=await SB.select('ndc_audit','order=ts.desc&limit=200'); return (r||[]).map(a=>({id:a.id,ts:a.ts,user:a.username,role:a.role,action:a.action,entityType:a.entity_type,entityId:a.entity_id,detail:a.detail})); },
+  audits: async ()=>{
+    let qs='order=ts.desc&limit=200';
+    if(!isNational()){ qs += '&username=eq.'+encodeURIComponent(State.session.username); }
+    const r=await SB.select('ndc_audit',qs);
+    return (r||[]).map(a=>({id:a.id,ts:a.ts,user:a.username,role:a.role,action:a.action,entityType:a.entity_type,entityId:a.entity_id,detail:a.detail}));
+  },
   // Legacy single-record lookups used by viewExecProfile and constituencyIdOf
   get: async (k)=>{
     try{
@@ -776,7 +781,7 @@ async function viewDashboard(){
   </div>
 
   <div class="card pad" style="margin-top:14px">
-    <h3 style="font-size:15px;margin-bottom:10px">Recent activity</h3>
+    <h3 style="font-size:15px;margin-bottom:10px">${isNational()?'Recent activity':'Your recent activity'}</h3>
     ${recent.length? recent.map(a=>`<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="badge ${a.action==='DELETE'?'r':a.action.startsWith('CREATE')?'':'k'}">${esc(a.action)}</span><span class="muted" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.detail||a.entityType)}</span><span class="tiny muted">${fmtDate(a.ts)}</span></div>`).join('') : '<p class="muted small">No activity yet.</p>'}
   </div>
 
@@ -1062,6 +1067,7 @@ async function viewExecForm(execId, q){
 
     ${parentField}
     ${textField('fullName','Full name',e&&e.fullName,true)}
+    ${textField('memberId','NDC member ID number',e&&e.memberId,true)}
     ${selectField('position','Position / title',slate.map(p=>({v:p,t:p})),e&&e.position,true,true)}
     <div class="grid2">
       ${selectField('gender','Gender',[{v:'male',t:'Male'},{v:'female',t:'Female'}],e&&e.gender,true)}
@@ -1107,7 +1113,7 @@ async function saveExec(){
   const form=$('#execForm'); const level=form.dataset.level; const id=form.dataset.id;
   const photo=$('#photoData').value;
   const rec={
-    fullName:fieldVal('fullName'), position:fieldVal('position'), gender:fieldVal('gender'),
+    fullName:fieldVal('fullName'), memberId:fieldVal('memberId'), position:fieldVal('position'), gender:fieldVal('gender'),
     phone:fieldVal('phone'), email:fieldVal('email'), dob:fieldVal('dob'),
     occupation:fieldVal('occupation'), address:fieldVal('address'), background:fieldVal('background'),
     photo, level, status:'active'
@@ -1117,7 +1123,7 @@ async function saveExec(){
   rec[parentKey]=fieldVal(parentKey);
   // validation
   let ok=true;
-  const required = ['fullName','position','gender','phone'].concat(parentKey?[parentKey]:[]);
+  const required = ['fullName','memberId','position','gender','phone'].concat(parentKey?[parentKey]:[]);
   required.forEach(f=>{ const bad=!rec[f]; setBad(f,bad); if(bad)ok=false; });
   if(rec.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rec.email)){ setBad('email',true,'Enter a valid email.'); ok=false; }
   if(rec.phone && !/^[0-9+()\-\s]{7,15}$/.test(rec.phone)){ setBad('phone',true,'Enter a valid phone number.'); ok=false; }
@@ -1172,6 +1178,7 @@ async function viewExecProfile(id){
     </div>
     <dl class="kv" style="margin-top:16px">
       <dt>Registration no.</dt><dd><b>${esc(e.regNo||'—')}</b></dd>
+      <dt>NDC member ID</dt><dd>${esc(e.memberId||'—')}</dd>
       <dt>${e.level==='region'?'Region':'Constituency'}</dt><dd>${con?`<a href="#/constituency/${conId}">${esc(con.name)}</a>`:(regionRec?`<a href="#/region/${regionRec.id}">${esc(regionRec.name)}</a>`:'—')}</dd>
       <dt>Phone</dt><dd>${esc(e.phone||'—')}</dd>
       <dt>Email</dt><dd>${esc(e.email||'—')}</dd>
@@ -1247,7 +1254,7 @@ function wireSearch(){
       if(con&&e._conId!==con) return false;
       if(lv&&e.level!==lv) return false;
       if(gn&&e.gender!==gn) return false;
-      if(q){ const hay=(e.fullName+' '+e.position+' '+e.phone+' '+(e.email||'')+' '+(e.regNo||'')).toLowerCase(); if(!hay.includes(q)) return false; }
+      if(q){ const hay=(e.fullName+' '+e.position+' '+e.phone+' '+(e.email||'')+' '+(e.regNo||'')+' '+(e.memberId||'')).toLowerCase(); if(!hay.includes(q)) return false; }
       return true;
     });
     if(sort==='name') out.sort((a,b)=>a.fullName.localeCompare(b.fullName));
@@ -1469,7 +1476,7 @@ async function viewData(){
     </div>
   </div>`;
 }
-const CSV_COLS = ['level','region','constituency','ward','branch','unit','fullName','position','gender','phone','email','dob','occupation','address','background'];
+const CSV_COLS = ['level','region','constituency','ward','branch','unit','fullName','memberId','position','gender','phone','email','dob','occupation','address','background'];
 const EXPORT_COLS = ['regNo'].concat(CSV_COLS);
 function csvEscape(v){ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 function toCSV(rows, cols=CSV_COLS){ return [cols.join(',')].concat(rows.map(r=>cols.map(c=>csvEscape(r[c])).join(','))).join('\n'); }
@@ -1503,7 +1510,7 @@ async function exportExecsCSV(){
     ward:e.level==='ward'?wn(e.wardId):(e.level==='branch'?wn((g.bMap[e.branchId]||{}).wardId):(e.level==='unit'?wn((g.bMap[(g.uMap[e.unitId]||{}).branchId]||{}).wardId):'')),
     branch:e.level==='branch'?bn(e.branchId):(e.level==='unit'?bn((g.uMap[e.unitId]||{}).branchId):''),
     unit:e.level==='unit'?un(e.unitId):'',
-    fullName:e.fullName, position:e.position, gender:e.gender, phone:e.phone, email:e.email, dob:e.dob, occupation:e.occupation, address:e.address, background:e.background
+    fullName:e.fullName, memberId:e.memberId||'', position:e.position, gender:e.gender, phone:e.phone, email:e.email, dob:e.dob, occupation:e.occupation, address:e.address, background:e.background
   };});
   const fname = scoped? `ndc_${((g.cMap[scoped]||{}).code||scoped).toLowerCase()}_executives_${new Date().toISOString().slice(0,10)}.csv` : `ndc_ghana_executives_${new Date().toISOString().slice(0,10)}.csv`;
   download(fname, toCSV(rows, EXPORT_COLS),'text/csv');
@@ -1548,13 +1555,13 @@ async function importCSV(file){
     const get=(k)=>(idx[k]>=0?(row[idx[k]]||'').trim():'');
     const level=get('level').toLowerCase();
     if(!['region','constituency','ward','branch','unit'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level`); continue; }
-    if(!get('fullName')||!get('position')||!get('gender')||!get('phone')){ fail++; errs.push(`Row ${r+1}: missing required field`); continue; }
+    if(!get('fullName')||!get('memberId')||!get('position')||!get('gender')||!get('phone')){ fail++; errs.push(`Row ${r+1}: missing required field`); continue; }
     const regionIdHint = findRegion(get('region'));
     if(level==='region'){
       const rid = regionIdHint;
       if(!rid){ fail++; errs.push(`Row ${r+1}: region not found`); continue; }
       const id=uid();
-      const rec={id, level, regionId:rid, fullName:get('fullName'), position:get('position'), gender:(get('gender').toLowerCase()), phone:get('phone'), email:get('email'), dob:get('dob'), occupation:get('occupation'), address:get('address'), background:get('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
+      const rec={id, level, regionId:rid, fullName:get('fullName'), memberId:get('memberId'), position:get('position'), gender:(get('gender').toLowerCase()), phone:get('phone'), email:get('email'), dob:get('dob'), occupation:get('occupation'), address:get('address'), background:get('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
       rec.regNo = await nextRegNo(await prefixForExec(rec));
       await SB.upsert('ndc_executives', execToRow(rec)); ok++; continue;
     }
@@ -1569,7 +1576,7 @@ async function importCSV(file){
     if(level==='branch'&&!branchId){ fail++; errs.push(`Row ${r+1}: branch name required`); continue; }
     if(level==='unit'&&!unitId){ fail++; errs.push(`Row ${r+1}: unit name required`); continue; }
     const id=uid();
-    const rec={id, level, fullName:get('fullName'), position:get('position'), gender:(get('gender').toLowerCase()), phone:get('phone'), email:get('email'), dob:get('dob'), occupation:get('occupation'), address:get('address'), background:get('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
+    const rec={id, level, fullName:get('fullName'), memberId:get('memberId'), position:get('position'), gender:(get('gender').toLowerCase()), phone:get('phone'), email:get('email'), dob:get('dob'), occupation:get('occupation'), address:get('address'), background:get('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
     if(level==='constituency') rec.constituencyId=conId;
     else rec[level+'Id'] = level==='ward'?wardId:level==='branch'?branchId:unitId;
     rec.regNo = await nextRegNo(await prefixForExec(rec));
@@ -1612,7 +1619,7 @@ async function restoreBackup(file){
 }
 function wireData(){
   $('[data-act=exportCsv]').onclick=exportExecsCSV;
-  $('[data-act=downloadTemplate]').onclick=()=>{ download('ndc_import_template.csv', CSV_COLS.join(',')+'\nward,Western Region,Essikado-Ketan,Esikado Central,,,Ama Mensah,Chairman,female,0244000000,,1985-03-12,Trader,Esikado,5 years organizing\n','text/csv'); };
+  $('[data-act=downloadTemplate]').onclick=()=>{ download('ndc_import_template.csv', CSV_COLS.join(',')+'\nward,Western Region,Essikado-Ketan,Esikado Central,,,Ama Mensah,NDC-123456,Chairman,female,0244000000,,1985-03-12,Trader,Esikado,5 years organizing\n','text/csv'); };
   const ci=$('#csvIn'); $('[data-act=pickCsv]').onclick=()=>ci.click(); ci.onchange=e=>{ if(e.target.files[0]) importCSV(e.target.files[0]); };
   $('[data-act=backup]').onclick=fullBackup;
   const bk=$('#bkIn'); if(bk){ $('[data-act=restore]').onclick=()=>bk.click(); bk.onchange=e=>{ if(e.target.files[0]) restoreBackup(e.target.files[0]); }; }
@@ -1708,13 +1715,14 @@ async function newUserFlow(){
    ============================================================ */
 async function viewAudit(){
   const a=await Data.audits();
+  const scopeLabel = isNational()? 'All users' : 'Your activity only';
   return `
-  <div class="section-head"><h2>Activity log</h2><span class="sub">Audit trail</span></div>
+  <div class="section-head"><h2>Activity log</h2><span class="sub">${esc(scopeLabel)}</span></div>
   ${a.length? `<div class="list">`+a.slice(0,200).map(x=>`
     <div class="item"><div class="av" style="background:${x.action==='DELETE'?'var(--red-soft)':'var(--green-soft)'};color:${x.action==='DELETE'?'var(--red)':'var(--green)'};font-size:13px">${esc(x.action.slice(0,3))}</div>
       <div class="body"><div class="nm" style="font-size:14px">${esc(x.detail||x.entityType)}</div><div class="mt">@${esc(x.user)} • ${esc(x.action)} • ${esc(x.entityType)}</div></div>
       <div class="tiny muted" style="text-align:right;white-space:nowrap">${new Date(x.ts).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
-    </div>`).join('')+`</div>` : emptyState('📋','No activity yet','Actions you take will be recorded here.')}`;
+    </div>`).join('')+`</div>` : emptyState('📋','No activity yet',isNational()?'Actions taken across the registry will be recorded here.':'Actions you take will be recorded here.')}`;
 }
 
 /* ============================================================
