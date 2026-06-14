@@ -1678,7 +1678,8 @@ async function newUserFlow(){
   const body=`
     <div class="field"><label>Full name</label><input id="nuName"></div>
     <div class="field"><label>Username</label><input id="nuUser"></div>
-    <div class="field"><label>Password</label><input id="nuPw" type="password"></div>
+    <div class="field"><label>Temporary password</label><input id="nuPw" type="password"></div>
+    <p class="muted small" style="margin:-4px 0 8px">The new user will be required to set their own password the first time they sign in.</p>
     <div class="field"><label>Role</label><select id="nuRole">
       <option value="constituency_admin">Constituency Admin</option>
       <option value="ward_admin">Ward Admin</option>
@@ -1695,7 +1696,7 @@ async function newUserFlow(){
   if(role!=='national_admin' && !conId){ toast('Select a constituency for this user',true); return; }
   r.el.remove();
   const con = conId? await Data.get('con:'+conId) : null;
-  const rec={id:username,username,password:pw,fullName:name||username,role};
+  const rec={id:username,username,password:pw,fullName:name||username,role,mustChangePassword:true};
   if(role!=='national_admin'){ rec.scopeConstituencyId=conId; rec.scopeConstituencyName=con?con.name:conId; }
   await SB.upsert('ndc_users', userToRow(rec));
   await audit('CREATE','user',username,'Added user @'+username+' ('+role+(con?', '+con.name:'')+')');
