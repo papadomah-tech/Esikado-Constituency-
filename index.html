@@ -604,6 +604,7 @@ async function _render(){
     else if(route==='album'){ c.innerHTML = await viewAlbum(q); wireAlbum(); }
     else if(route==='data'){ c.innerHTML = await viewData(); wireData(); }
     else if(route==='admin'){ c.innerHTML = await viewAdmin(); wireAdmin(); }
+    else if(route==='account'){ c.innerHTML = await viewAccount(); wireAccount(); }
     else if(route==='audit'){ c.innerHTML = await viewAudit(); }
     else { c.innerHTML = await viewDashboard(); }
   }catch(e){ console.error(e); c.innerHTML = `<div class="empty"><div class="e-ico">⚠️</div><h3>Something went wrong</h3><p class="muted">${esc(e.message)}</p></div>`; }
@@ -638,6 +639,7 @@ function shell(active){
       </div>
       <div class="right">
         <span class="sync-dot" id="syncDot"><i></i><span id="syncTxt">Local</span></span>
+        <button class="iconbtn" data-act="account" title="My account">👤</button>
         <button class="iconbtn" data-act="logout" title="Sign out">⏻</button>
       </div>
     </div>
@@ -1652,16 +1654,40 @@ async function viewAdmin(){
 
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:6px">Security note</h3>
-    <p class="muted small" style="margin:0">User accounts here are stored on this device only. For real multi-device authentication, scoped permissions, and audit integrity, connect the Supabase backend described in the deployment guide. Change the default admin password now.</p>
-    <div class="field" style="margin-top:10px"><label>Current password</label><input id="curPw" type="password" autocomplete="current-password" placeholder="Current password"></div>
-    <div class="field"><label>New password</label><input id="newPw" type="password" autocomplete="new-password" placeholder="At least 4 characters"></div>
-    <div class="field"><label>Confirm new password</label><input id="confirmPw" type="password" autocomplete="new-password" placeholder="Repeat new password"></div>
-    <button class="btn sm" data-act="resetPw">Update password</button>
+    <p class="muted small" style="margin:0">User accounts are shared across all devices via the central database. To change your own password, use the account icon (👤) in the top bar.</p>
   </div>`;
 }
 function wireAdmin(){
   const nu=$('[data-act=newUser]'); if(nu) nu.onclick=newUserFlow;
   document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{ const go=await confirmModal('Remove user?','This removes login access for @'+b.dataset.id+'.'); if(go){ await SB.delete('ndc_users','id=eq.'+encodeURIComponent(b.dataset.id)); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); } });
+}
+
+/* ============================================================
+   ACCOUNT (every signed-in user: change own password)
+   ============================================================ */
+async function viewAccount(){
+  const u = State.session;
+  const roleLabel = (u.role||'').replace(/_/g,' ');
+  const scopeLine = u.scopeConstituencyId ? `<p class="muted small" style="margin:4px 0 0">Constituency: ${esc(u.scopeConstituencyName||u.scopeConstituencyId)}</p>` : '';
+  return `
+  <div class="section-head"><h2>My account</h2></div>
+
+  <div class="card pad">
+    <h3 style="font-size:15px;margin-bottom:4px">${esc(u.fullName||u.username)}</h3>
+    <p class="muted small" style="margin:0">@${esc(u.username)} • ${esc(roleLabel)}</p>
+    ${scopeLine}
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:6px">Change password</h3>
+    <p class="muted small" style="margin:0 0 10px">Choose a password only you know. You will need your current password to set a new one.</p>
+    <div class="field"><label>Current password</label><input id="curPw" type="password" autocomplete="current-password" placeholder="Current password"></div>
+    <div class="field"><label>New password</label><input id="newPw" type="password" autocomplete="new-password" placeholder="At least 4 characters"></div>
+    <div class="field"><label>Confirm new password</label><input id="confirmPw" type="password" autocomplete="new-password" placeholder="Repeat new password"></div>
+    <button class="btn sm primary" data-act="resetPw">Update password</button>
+  </div>`;
+}
+function wireAccount(){
   $('[data-act=resetPw]').onclick=async()=>{
     const curPw=$('#curPw').value.trim(), newPw=$('#newPw').value.trim(), confirmPw=$('#confirmPw').value.trim();
     const rows=await SB.select('ndc_users','username=eq.'+encodeURIComponent(State.session.username)+'&limit=1');
@@ -1791,6 +1817,7 @@ function wireGlobal(){
 async function onAction(e){
   const el=e.currentTarget; const act=el.dataset.act; e.stopPropagation();
   if(act==='logout') return logout();
+  if(act==='account'){ location.hash='#/account'; return render(); }
   if(act==='newWard') return orgFormModal('ward',null,null);
   if(act==='newWardIn') return orgFormModal('ward',null,el.dataset.con);
   if(act==='newChild') return orgFormModal(el.dataset.level,null,el.dataset.parent);
