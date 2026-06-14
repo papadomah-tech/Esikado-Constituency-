@@ -404,20 +404,18 @@ const State = { session:null, settings:{}, currentCon:null };
 /* ---------------- Bootstrap / seed ---------------- */
 async function bootstrap(){
   try{
-    // Ensure the default admin account exists in Supabase (only inserts if absent).
-    await SB.upsert('ndc_users', {
-      id:'admin', username:'admin', password:'ndc2024',
-      full_name:'National Administrator', role:'national_admin',
-      must_change_password:true,
-    });
-    // If admin already existed with a real password, the upsert merge keeps it
-    // (Supabase merge-duplicates: existing columns win when the row already exists).
-    // However, we must NOT force must_change_password=true on a row where the admin
-    // has already changed it — so we patch only when the stored password IS still ndc2024.
-    const adminRows = await SB.select('ndc_users','id=eq.admin&select=password,must_change_password');
-    const adm = adminRows && adminRows[0];
-    if(adm && adm.password==='ndc2024' && !adm.must_change_password){
-      await SB.update('ndc_users','id=eq.admin',{must_change_password:true});
+    // Check whether the admin account already exists. Only insert the default
+    // seed row if it is completely absent — an existing row (with whatever
+    // password and must_change_password value it currently has) must NEVER
+    // be touched here, on any device, at any time. This is the one and only
+    // place the default credential is ever written.
+    const existing = await SB.select('ndc_users','id=eq.admin&select=id&limit=1');
+    if(!existing || !existing.length){
+      await SB.upsert('ndc_users', {
+        id:'admin', username:'admin', password:'ndc2024',
+        full_name:'National Administrator', role:'national_admin',
+        must_change_password:true,
+      });
     }
   }catch(e){ console.warn('Bootstrap admin seed error:',e.message); }
   // Restore session from sessionStorage (survives page refresh, not new tab)
