@@ -179,6 +179,7 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 .login-logo{width:130px;height:auto;display:block;margin:0 auto 14px}
 .login-brand .t1{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
 .login-brand .t2{font-size:21px;font-weight:800;color:var(--green-dark);margin-top:3px}
+.login-brand .t3{font-size:12px;font-style:italic;color:var(--muted);margin-top:6px}
 .login-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:16px;line-height:1.5}
 .fab{position:fixed;right:max(16px,calc(50% - 380px + 16px));bottom:22px;z-index:25;background:var(--red);color:#fff;border:0;height:54px;padding:0 20px;border-radius:999px;font-weight:800;font-size:15px;box-shadow:0 10px 26px rgba(206,17,38,.4);display:inline-flex;align-items:center;gap:8px}
 
@@ -201,6 +202,8 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 .album-print-head img{width:54px;height:auto;margin:0 auto 6px;display:block}
 .album-print-head .pt{font-size:18px;font-weight:800;color:var(--green-dark)}
 .album-print-head .ps{font-size:12px;color:var(--muted);margin-top:2px}
+.album-print-head .pm{font-size:11px;font-style:italic;color:var(--muted);margin-top:4px;letter-spacing:.04em}
+.album-print-foot{text-align:center;font-size:13px;font-weight:800;color:var(--green-dark);margin-top:16px;padding-top:8px;border-top:1px solid #ddd}
 
 @media print{
   @page{margin:12mm}
@@ -213,6 +216,7 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
   .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
   .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important;cursor:auto}
   .album-ward-head{break-after:avoid;page-break-after:avoid}
+  .album-print-foot{break-inside:avoid;page-break-inside:avoid}
   .card{box-shadow:none !important}
 }
 </style>
@@ -370,6 +374,9 @@ const DEFAULT_POSITIONS = [
 
 /* ---------------- Regions & constituencies (Ghana, fixed national structure) ---------------- */
 const NATION_NAME = 'Ghana';
+// Party branding identities
+const PARTY_MOTTO = 'Unity, Stability, and Development';
+const PARTY_SLOGAN = 'ƐyƐ Zu ƐyƐ Za';
 // 16 regions, each with its constituencies as [code, name] pairs.
 const REGIONS =   [
     {code:"WR",name:"Western Region",constituencies:[["AHW","Ahanta West"],["AMC","Amenfi Central"],["AME","Amenfi East"],["AMW","Amenfi West"],["EFF","Effia"],["ELL","Ellembelle"],["ESK","Essikado-Ketan"],["EVA","Evalue-Gwira"],["JOM","Jomoro"],["KWE","Kwesimintsim"],["MPO","Mpohor"],["PHV","Prestea-Huni Valley"],["SEK","Sekondi"],["SHA","Shama"],["TAK","Takoradi"],["TKN","Tarkwa-Nsuaem"],["WSE","Wassa East"]]},
@@ -631,7 +638,7 @@ function shell(active){
   return `
   <div class="topbar">
     <div class="topbar-in">
-      <div class="brand"><span class="brand-mark"><img src="${LOGO_MARK}" alt="NDC umbrella"></span>
+      <div class="brand" title="${esc(PARTY_MOTTO)}"><span class="brand-mark"><img src="${LOGO_MARK}" alt="NDC umbrella"></span>
         <div class="brand-txt">
           <div class="t1">NDC • ${ctx}</div>
           <div class="t2">Executive Registry</div>
@@ -667,6 +674,7 @@ function viewLogin(){
         <img class="login-logo" src="${LOGO_FULL}" alt="NDC logo" />
         <div class="t1">${esc(NATION_NAME)}</div>
         <div class="t2">NDC Party Executive Registry</div>
+        <div class="t3">${esc(PARTY_MOTTO)}</div>
       </div>
       <div class="field"><label>Username</label><input id="lu" autocomplete="username" placeholder="Username" /></div>
       <div class="field"><label>Password</label><input id="lp" type="password" autocomplete="current-password" placeholder="••••••••" /></div>
@@ -1329,7 +1337,9 @@ async function viewReports(){
       <dt>Unit level</dt><dd>${byLevel('unit').length}</dd>
       <dt>${scoped?'Wards / Branches / Units':'Regions / Constituencies / Wards / Branches / Units'}</dt><dd>${scoped?'':(g.regions.length+' / '+g.cons.length+' / ')}${wards.length} / ${branches.length} / ${units.length}</dd>
     </div>
-  </div>`;
+  </div>
+
+  <p class="muted small" style="text-align:center;font-style:italic;margin-top:18px">${esc(PARTY_MOTTO)}</p>`;
 }
 
 /* ============================================================
@@ -1374,6 +1384,7 @@ async function viewAlbum(q){
     <img src="${LOGO_FULL}" alt="NDC">
     <div class="pt">${esc(scopeName)}${scoped?' Constituency':''}</div>
     <div class="ps" id="albumPrintMeta">Executive Photo Album</div>
+    <div class="pm">${esc(PARTY_MOTTO)}</div>
   </div>
 
   <div class="section-head no-print"><h2>Photo album</h2><span class="sub">${esc(scopeName)}</span><span class="spacer"></span>
@@ -1385,7 +1396,8 @@ async function viewAlbum(q){
     <select id="albLevel">${levelOpts}</select>
     <select id="albSort"><option value="reg">Sort: Reg. number</option><option value="name">Sort: Name</option></select>
   </div>
-  <div id="albumBody"></div>`;
+  <div id="albumBody"></div>
+  <div class="album-print-foot print-only">${esc(PARTY_SLOGAN)}</div>`;
 }
 
 function albumRenderBody(){
