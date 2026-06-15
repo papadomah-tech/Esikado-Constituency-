@@ -309,12 +309,14 @@ function wardToRow(w){
   return {id:w.id, name:w.name, constituency_id:w.constituencyId, code:w.code||null, created_at:w.createdAt||new Date().toISOString(), updated_at:w.updatedAt||new Date().toISOString(), created_by:w.createdBy||null};
 }
 function rowToWard(r){ return {id:r.id, name:r.name, constituencyId:r.constituency_id, code:r.code, type:'ward', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
-function branchToRow(b){ return {id:b.id, name:b.name, ward_id:b.wardId, created_at:b.createdAt||new Date().toISOString(), updated_at:b.updatedAt||new Date().toISOString(), created_by:b.createdBy||null}; }
-function rowToBranch(r){ return {id:r.id, name:r.name, wardId:r.ward_id, type:'branch', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
+function branchToRow(b){ return {id:b.id, name:b.name, ward_id:b.wardId, nominations_open:b.nominationsOpen||false, created_at:b.createdAt||new Date().toISOString(), updated_at:b.updatedAt||new Date().toISOString(), created_by:b.createdBy||null}; }
+function rowToBranch(r){ return {id:r.id, name:r.name, wardId:r.ward_id, nominationsOpen:r.nominations_open||false, type:'branch', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function unitToRow(u){ return {id:u.id, name:u.name, branch_id:u.branchId, created_at:u.createdAt||new Date().toISOString(), updated_at:u.updatedAt||new Date().toISOString(), created_by:u.createdBy||null}; }
 function rowToUnit(r){ return {id:r.id, name:r.name, branchId:r.branch_id, type:'unit', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function regMemberToRow(m){ return {id:m.id, branch_id:m.branchId, registry_no:m.registryNo, full_name:m.fullName, phone:m.phone||null, gender:m.gender||null, dob:m.dob||null, created_at:m.createdAt||new Date().toISOString(), updated_at:new Date().toISOString(), created_by:m.createdBy||null}; }
 function rowToRegMember(r){ return {id:r.id, branchId:r.branch_id, registryNo:r.registry_no, fullName:r.full_name, phone:r.phone, gender:r.gender, dob:r.dob, createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
+function nominationToRow(n){ return {id:n.id, branch_id:n.branchId, registry_no:n.registryNo, full_name:n.fullName, phone:n.phone||null, gender:n.gender||null, dob:n.dob||null, position:n.position, status:n.status||'pending', filed_at:n.filedAt||new Date().toISOString(), reviewed_at:n.reviewedAt||null, reviewed_by:n.reviewedBy||null, notified_at:n.notifiedAt||null}; }
+function rowToNomination(r){ return {id:r.id, branchId:r.branch_id, registryNo:r.registry_no, fullName:r.full_name, phone:r.phone, gender:r.gender, dob:r.dob, position:r.position, status:r.status, filedAt:r.filed_at, reviewedAt:r.reviewed_at, reviewedBy:r.reviewed_by, notifiedAt:r.notified_at}; }
 function userToRow(u){
   return {id:u.id||u.username, username:u.username, password:u.password, full_name:u.fullName||u.username, role:u.role, scope_constituency_id:u.scopeConstituencyId||null, scope_constituency_name:u.scopeConstituencyName||null, scope_branch_id:u.scopeBranchId||null, scope_branch_name:u.scopeBranchName||null, is_branch_secretary:u.isBranchSecretary||false, must_change_password:u.mustChangePassword||false, suspended:u.suspended||false, created_by:u.createdBy||null, updated_at:new Date().toISOString()};
 }
@@ -527,6 +529,10 @@ function userConId(){ return isNational()? null : (State.session && State.sessio
 function inScope(conId){ const s=userConId(); return s===null ? true : conId===s; }
 // The constituency context currently in view (national admins can switch; others are fixed).
 function activeConId(){ return isNational()? State.currentCon : userConId(); }
+// Whether the current user may open/close nominations and review filings for a branch.
+function canManageNominations(){
+  return isNational() || (State.session && State.session.role==='constituency_admin');
+}
 // Whether the current user is the designated Branch Secretary for a given branch.
 function isBranchSecretaryFor(branchId){
   const u = State.session;
@@ -557,6 +563,7 @@ const Data = {
     return (r||[]).map(a=>({id:a.id,ts:a.ts,user:a.username,role:a.role,action:a.action,entityType:a.entity_type,entityId:a.entity_id,detail:a.detail}));
   },
   branchRegister: async (branchId)=>{ const r=await SB.select('ndc_branch_register','branch_id=eq.'+encodeURIComponent(branchId)+'&order=registry_no.asc'); return (r||[]).map(rowToRegMember); },
+  nominations: async (branchId)=>{ const r=await SB.select('ndc_nominations','branch_id=eq.'+encodeURIComponent(branchId)+'&order=filed_at.asc'); return (r||[]).map(rowToNomination); },
   // Legacy single-record lookups used by viewExecProfile and constituencyIdOf
   get: async (k)=>{
     try{
@@ -621,9 +628,11 @@ async function render(){
 async function _render(){
   await ensureReady;
   const app=$('#app');
+  const {parts,q}=parseHash();
+  // Public route: anyone can file a nomination without signing in.
+  if((parts[0]||'')==='nominate'){ app.innerHTML = await viewNominate(q); wireNominate(q); return; }
   if(!State.session){ app.innerHTML = viewLogin(); wireLogin(); return; }
   if(State.session.mustChangePassword){ app.innerHTML = viewForcePasswordChange(); wireForcePasswordChange(); return; }
-  const {parts,q}=parseHash();
   const route = parts[0]||'dashboard';
   // shell
   app.innerHTML = shell(route);
@@ -639,6 +648,7 @@ async function _render(){
     else if(route==='branch'){ c.innerHTML = await viewOrgDetail('branch', parts[1]); }
     else if(route==='unit'){ c.innerHTML = await viewOrgDetail('unit', parts[1]); }
     else if(route==='register'){ c.innerHTML = await viewBranchRegister(parts[1]); wireBranchRegister(parts[1]); }
+    else if(route==='nominations'){ c.innerHTML = await viewNominationsReview(parts[1]); wireNominationsReview(parts[1]); }
     else if(route==='exec'){
       if(parts[1]==='new'){ c.innerHTML = await viewExecForm(null,q); wireExecForm(); }
       else if(parts[2]==='edit'){ c.innerHTML = await viewExecForm(parts[1],q); wireExecForm(); }
@@ -717,6 +727,7 @@ function viewLogin(){
       <div class="field"><label>Username</label><input id="lu" autocomplete="username" placeholder="Username" /></div>
       <div class="field"><label>Password</label><input id="lp" type="password" autocomplete="current-password" placeholder="••••••••" /></div>
       <button class="btn primary block" data-act="dologin">Sign in</button>
+      <p style="text-align:center;margin-top:14px"><a href="#/nominate" class="small">📝 File a nomination for a branch position</a></p>
     </div>
   </div>`;
 }
@@ -725,6 +736,138 @@ function wireLogin(){
   $('[data-act=dologin]').addEventListener('click',go);
   $('#lp').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
   $('#lu').focus();
+}
+
+/* ============================================================
+   PUBLIC NOMINATION FILING (no sign-in required)
+   A registered member finds their branch, enters their registry
+   number to verify identity against the Branch Register, then
+   files a nomination for a single branch position. Filed
+   nominations start as 'pending' and are reviewed by a
+   Constituency Admin or National Admin.
+   ============================================================ */
+async function viewNominate(q){
+  const regions = REGIONS.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const regionOpts = regions.map(r=>`<option value="${esc(r.code)}" ${q.reg===r.code?'selected':''}>${esc(r.name)}</option>`).join('');
+  return `<div class="login-wrap">
+    <div class="login-card" style="max-width:440px">
+      <div class="login-brand">
+        <img class="login-logo" src="${LOGO_FULL}" alt="NDC logo" />
+        <div class="t1">${esc(NATION_NAME)}</div>
+        <div class="t2">File a Nomination</div>
+        <div class="t3">${esc(PARTY_MOTTO)}</div>
+      </div>
+      <div id="nomStep1">
+        <p class="muted small" style="margin:0 0 10px">Select your branch to begin.</p>
+        <div class="field"><label>Region</label><select id="nomReg"><option value="">Select…</option>${regionOpts}</select></div>
+        <div class="field"><label>Constituency</label><select id="nomCon" disabled><option value="">Select region first…</option></select></div>
+        <div class="field"><label>Zonal/Electoral Area</label><select id="nomWard" disabled><option value="">Select constituency first…</option></select></div>
+        <div class="field"><label>Branch</label><select id="nomBranch" disabled><option value="">Select zonal/electoral area first…</option></select></div>
+      </div>
+      <div id="nomStep2"></div>
+      <p style="text-align:center;margin-top:14px"><a href="#/login" class="small">‹ Back to sign in</a></p>
+    </div>
+  </div>`;
+}
+function wireNominate(q){
+  const regSel=$('#nomReg'), conSel=$('#nomCon'), wardSel=$('#nomWard'), branchSel=$('#nomBranch');
+  const step2=$('#nomStep2');
+
+  const setDisabled=(sel,placeholder)=>{ sel.innerHTML=`<option value="">${placeholder}</option>`; sel.disabled=true; };
+
+  regSel.addEventListener('change',async()=>{
+    setDisabled(conSel,'Select region first…'); setDisabled(wardSel,'Select constituency first…'); setDisabled(branchSel,'Select zonal/electoral area first…'); step2.innerHTML='';
+    const rid=regSel.value; if(!rid) return;
+    const cons = CONSTITUENCIES.filter(c=>c.regionId===rid).sort((a,b)=>a.name.localeCompare(b.name));
+    conSel.innerHTML = '<option value="">Select…</option>'+cons.map(c=>`<option value="${esc(c.code)}">${esc(c.name)}</option>`).join('');
+    conSel.disabled=false;
+  });
+
+  conSel.addEventListener('change',async()=>{
+    setDisabled(wardSel,'Select constituency first…'); setDisabled(branchSel,'Select zonal/electoral area first…'); step2.innerHTML='';
+    const cid=conSel.value; if(!cid) return;
+    const wards = (await Data.wards()).filter(w=>w.constituencyId===cid).sort((a,b)=>a.name.localeCompare(b.name));
+    if(!wards.length){ wardSel.innerHTML='<option value="">No zonal/electoral areas found</option>'; return; }
+    wardSel.innerHTML = '<option value="">Select…</option>'+wards.map(w=>`<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('');
+    wardSel.disabled=false;
+  });
+
+  wardSel.addEventListener('change',async()=>{
+    setDisabled(branchSel,'Select zonal/electoral area first…'); step2.innerHTML='';
+    const wid=wardSel.value; if(!wid) return;
+    const branches = (await Data.branches()).filter(b=>b.wardId===wid).sort((a,b)=>a.name.localeCompare(b.name));
+    if(!branches.length){ branchSel.innerHTML='<option value="">No branches found</option>'; return; }
+    branchSel.innerHTML = '<option value="">Select…</option>'+branches.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+    branchSel.disabled=false;
+  });
+
+  branchSel.addEventListener('change',async()=>{
+    step2.innerHTML='';
+    const bid=branchSel.value; if(!bid) return;
+    const branch = await Data.get('branch:'+bid);
+    if(!branch){ step2.innerHTML='<p class="muted small">Branch not found.</p>'; return; }
+    if(!branch.nominationsOpen){
+      step2.innerHTML = `<div class="card pad" style="margin-top:14px;background:var(--green-soft);border:0"><p class="muted small" style="margin:0">Nominations are not currently open for <b>${esc(branch.name)}</b>. Please check back later or contact your branch secretary.</p></div>`;
+      return;
+    }
+    step2.innerHTML = `
+      <div class="card pad" style="margin-top:14px">
+        <p class="muted small" style="margin:0 0 10px">Nominations are open for <b>${esc(branch.name)}</b>. Enter your registry number to verify your details.</p>
+        <div class="field"><label>Registry number</label><input id="nomRegNo" placeholder="e.g. MEMBER-xxxxxx-0001"></div>
+        <button class="btn primary block" data-act="verifyMember">Verify</button>
+        <div id="nomVerifyResult"></div>
+      </div>`;
+    $('[data-act=verifyMember]').onclick=async()=>{
+      const regNo=$('#nomRegNo').value.trim();
+      if(!regNo){ toast('Enter your registry number',true); return; }
+      const members = await Data.branchRegister(bid);
+      const member = members.find(m=>m.registryNo.toLowerCase()===regNo.toLowerCase());
+      if(!member){
+        $('#nomVerifyResult').innerHTML = `<p class="muted small" style="margin:8px 0 0;color:var(--red)">Registry number not found for this branch. Check the number and try again, or contact your branch secretary.</p>`;
+        return;
+      }
+      // Check for an existing pending/cleared nomination by this member at this branch.
+      const existingNoms = await SB.select('ndc_nominations','branch_id=eq.'+encodeURIComponent(bid)+'&registry_no=eq.'+encodeURIComponent(member.registryNo)+'&status=neq.rejected');
+      const positions = posForLevel(await Data.positions(),'branch');
+      const takenPositions = new Set((existingNoms||[]).map(n=>n.position));
+      const availablePositions = positions.filter(p=>!takenPositions.has(p));
+      if(!availablePositions.length){
+        $('#nomVerifyResult').innerHTML = `<p class="muted small" style="margin:8px 0 0">You have already filed a nomination for every available position at this branch.</p>`;
+        return;
+      }
+      $('#nomVerifyResult').innerHTML = `
+        <div style="margin-top:10px">
+          <p class="muted small" style="margin:0 0 8px">Welcome, <b>${esc(member.fullName)}</b> (${esc(member.registryNo)}). Select the position you wish to contest.</p>
+          <div class="field"><label>Position</label><select id="nomPosition"><option value="">Select…</option>${availablePositions.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select></div>
+          <div class="field"><label>Phone</label><input id="nomPhone" value="${esc(member.phone||'')}" placeholder="Phone number"></div>
+          <div class="field"><label>Gender</label><select id="nomGender">
+            <option value="">Select…</option>
+            <option value="male" ${member.gender==='male'?'selected':''}>Male</option>
+            <option value="female" ${member.gender==='female'?'selected':''}>Female</option>
+          </select></div>
+          <div class="field"><label>Date of birth</label><input id="nomDob" type="date" value="${esc(member.dob||'')}"></div>
+          <button class="btn primary block" data-act="fileNomination">File nomination</button>
+          <div id="nomFileResult"></div>
+        </div>`;
+      $('[data-act=fileNomination]').onclick=async()=>{
+        const position=$('#nomPosition').value, phone=$('#nomPhone').value.trim(), gender=$('#nomGender').value, dob=$('#nomDob').value;
+        if(!position){ toast('Select the position you wish to contest',true); return; }
+        if(!phone){ toast('Enter a phone number',true); return; }
+        const rec={
+          id:uid(), branchId:bid, registryNo:member.registryNo, fullName:member.fullName,
+          phone, gender, dob, position, status:'pending', filedAt:nowISO(),
+        };
+        try{
+          await SB.upsert('ndc_nominations', nominationToRow(rec));
+          await audit('CREATE','nomination',rec.id,member.fullName+' ('+member.registryNo+') filed for '+position+' at '+branch.name);
+          $('#nomFileResult').innerHTML = `<div class="card pad" style="margin-top:10px;background:var(--green-soft);border:0"><p class="muted small" style="margin:0">Your nomination for <b>${esc(position)}</b> has been received and is pending review. You will be contacted with the outcome.</p></div>`;
+          document.querySelectorAll('#nomStep2 .field, #nomStep2 [data-act=fileNomination]').forEach(el=>el.style.display='none');
+        }catch(e){
+          toast('Could not submit nomination: '+e.message,true);
+        }
+      };
+    };
+  });
 }
 
 /* ============================================================
@@ -1021,6 +1164,8 @@ async function viewOrgDetail(level, id){
     ${ownExecs.length? `<div class="list" style="margin-top:6px">`+ownExecs.map(execItem).join('')+`</div>` : '<p class="muted small" style="margin:6px 0 0">No executives registered at this level yet.</p>'}
   </div>
 
+  ${(level==='branch'&&canManageNominations())? await branchNominationsCard(node) : ''}
+
   ${childLevel? `
   <div class="card pad" style="margin-top:14px">
     <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">${childLabel}</h3><span class="badge k">${children.length}</span><span class="spacer"></span>
@@ -1040,6 +1185,27 @@ function execItem(e){
     <div class="av">${e.photo?`<img src="${e.photo}" alt="">`:initials(e.fullName)}</div>
     <div class="body"><div class="nm">${esc(e.fullName)}</div><div class="mt">${e.regNo?`<span class="reg">${esc(e.regNo)}</span> • `:''}${esc(e.position||'—')} • ${esc(e.phone||'')}</div></div>
     <div class="chev">›</div>
+  </div>`;
+}
+// Nominations & elections summary card shown on a branch's page to those who
+// can open/close nominations and review filings (National/Constituency Admin).
+async function branchNominationsCard(branch){
+  const noms = await Data.nominations(branch.id);
+  const pending = noms.filter(n=>n.status==='pending').length;
+  const cleared = noms.filter(n=>n.status==='cleared').length;
+  return `
+  <div class="card pad" style="margin-top:14px">
+    <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Nominations</h3><span class="spacer"></span>
+      <label class="row small" style="gap:8px;cursor:pointer"><input type="checkbox" id="nomToggle" data-branch="${branch.id}" ${branch.nominationsOpen?'checked':''} style="width:auto"> Nominations open</label>
+    </div>
+    <p class="muted small" style="margin:0 0 10px">${branch.nominationsOpen
+      ? 'Members can file nominations for this branch via the "File a nomination" link on the login page.'
+      : 'Nominations are closed. Toggle on to allow members to file for branch positions.'}</p>
+    <div class="row small" style="margin-bottom:10px">
+      <span class="badge ${pending?'y':''}">${pending}</span><span>pending review</span>
+      <span class="badge k" style="margin-left:14px">${cleared}</span><span>cleared candidate(s)</span>
+    </div>
+    <button class="btn sm" data-link="#/nominations/${branch.id}">📝 Review nominations</button>
   </div>`;
 }
 async function buildCrumb(level,node){
@@ -1144,6 +1310,97 @@ function wireBranchRegister(branchId){
     await SB.delete('ndc_branch_register','id=eq.'+encodeURIComponent(b.dataset.id));
     await audit('DELETE','branch_register',b.dataset.id,'Removed '+(existing?existing.fullName+' ['+existing.registryNo+']':'member')+' from branch register');
     toast('Removed'); render();
+  });
+}
+
+/* ============================================================
+   NOMINATIONS REVIEW
+   Constituency Admin / National Admin reviews nominations filed
+   for a branch's positions: clear (approve) or reject. Cleared
+   candidates get a ready-to-send notification message (manual
+   copy/paste for SMS or WhatsApp).
+   ============================================================ */
+function nominationMessage(n, branchName){
+  return `Hello ${n.fullName}, your nomination for ${n.position} at ${branchName} has been CLEARED. You are confirmed as a candidate for the upcoming branch election. ${PARTY_MOTTO}.`;
+}
+async function viewNominationsReview(branchId){
+  const branch = await Data.get('branch:'+branchId);
+  if(!branch) return emptyState('🚫','Not found','This branch may have been deleted.');
+  const conId = await constituencyIdOf(branch);
+  if(!inScope(conId)) return denyView();
+  if(!canManageNominations()) return denyView();
+  const noms = await Data.nominations(branchId);
+  const pending = noms.filter(n=>n.status==='pending');
+  const cleared = noms.filter(n=>n.status==='cleared');
+  const rejected = noms.filter(n=>n.status==='rejected');
+
+  const nomItem = (n, actions)=>`
+    <div class="item" data-id="${esc(n.id)}">
+      <div class="av">${initials(n.fullName)}</div>
+      <div class="body"><div class="nm">${esc(n.fullName)} <span class="reg">${esc(n.registryNo)}</span></div><div class="mt">${esc(n.position)} • ${esc(n.phone||'—')}${n.gender?' • '+esc(n.gender.replace(/^./,c=>c.toUpperCase())):''}</div></div>
+      ${actions}
+    </div>`;
+
+  return `
+  <div class="crumb"><a href="#/branch/${branchId}">‹ ${esc(branch.name)}</a></div>
+  <div class="section-head"><h2>Nominations</h2><span class="sub">${esc(branch.name)}</span></div>
+
+  <div class="card pad">
+    <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Pending review</h3><span class="badge ${pending.length?'y':''}">${pending.length}</span></div>
+    ${pending.length? `<div class="list">`+pending.map(n=>nomItem(n,`
+      <div class="row" style="gap:6px;flex:0 0 auto">
+        <button class="btn sm primary" data-act="clearNom" data-id="${esc(n.id)}">Clear</button>
+        <button class="btn sm danger" data-act="rejectNom" data-id="${esc(n.id)}">Reject</button>
+      </div>`)).join('')+`</div>` : '<p class="muted small" style="margin:0">No nominations awaiting review.</p>'}
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Cleared candidates</h3><span class="badge k">${cleared.length}</span></div>
+    ${cleared.length? `<div class="list">`+cleared.map(n=>nomItem(n,`
+      <div class="row" style="gap:6px;flex:0 0 auto">
+        <button class="btn sm" data-act="copyMsg" data-id="${esc(n.id)}" title="Copy notification message">${n.notifiedAt?'✓ Notified':'📋 Copy message'}</button>
+      </div>`)).join('')+`</div>` : '<p class="muted small" style="margin:0">No cleared candidates yet.</p>'}
+  </div>
+
+  ${rejected.length?`
+  <div class="card pad" style="margin-top:14px">
+    <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Rejected</h3><span class="badge r">${rejected.length}</span></div>
+    <div class="list">${rejected.map(n=>nomItem(n,'')).join('')}</div>
+  </div>`:''}
+  `;
+}
+function wireNominationsReview(branchId){
+  document.querySelectorAll('[data-act=clearNom]').forEach(b=>b.onclick=async()=>{
+    const go=await confirmModal('Clear this nomination?','This confirms the candidate for the branch election. They can be notified afterwards via the Copy message button.');
+    if(!go) return;
+    await SB.update('ndc_nominations','id=eq.'+encodeURIComponent(b.dataset.id),{status:'cleared',reviewed_at:nowISO(),reviewed_by:State.session.username});
+    await audit('UPDATE','nomination',b.dataset.id,'Cleared nomination');
+    toast('Nomination cleared'); render();
+  });
+  document.querySelectorAll('[data-act=rejectNom]').forEach(b=>b.onclick=async()=>{
+    const go=await confirmModal('Reject this nomination?','The candidate will not appear in the branch election. This can be reversed by editing the nomination record in the database if needed.');
+    if(!go) return;
+    await SB.update('ndc_nominations','id=eq.'+encodeURIComponent(b.dataset.id),{status:'rejected',reviewed_at:nowISO(),reviewed_by:State.session.username});
+    await audit('UPDATE','nomination',b.dataset.id,'Rejected nomination');
+    toast('Nomination rejected'); render();
+  });
+  document.querySelectorAll('[data-act=copyMsg]').forEach(b=>b.onclick=async()=>{
+    const noms = await Data.nominations(branchId);
+    const n = noms.find(x=>x.id===b.dataset.id);
+    if(!n) return;
+    const branch = await Data.get('branch:'+branchId);
+    const msg = nominationMessage(n, branch?branch.name:'');
+    try{
+      await navigator.clipboard.writeText(msg);
+      toast('Message copied — paste into SMS or WhatsApp');
+    }catch{
+      toast('Could not copy automatically — message: '+msg,true);
+    }
+    if(!n.notifiedAt){
+      await SB.update('ndc_nominations','id=eq.'+encodeURIComponent(n.id),{notified_at:nowISO()});
+      await audit('UPDATE','nomination',n.id,'Marked candidate notified');
+      render();
+    }
   });
 }
 
@@ -2068,6 +2325,18 @@ async function orgFormModal(type, existing, parentId){
 function wireGlobal(){
   document.querySelectorAll('[data-link]').forEach(el=>{ el.style.cursor='pointer'; el.onclick=(e)=>{ if(e.target.closest('[data-act]'))return; location.hash=el.dataset.link; render(); }; });
   document.querySelectorAll('[data-act]').forEach(el=> el.addEventListener('click', onAction));
+  const nomToggle=$('#nomToggle');
+  if(nomToggle) nomToggle.addEventListener('change', async()=>{
+    const branchId=nomToggle.dataset.branch, open=nomToggle.checked;
+    nomToggle.disabled=true;
+    try{
+      await SB.update('ndc_branches','id=eq.'+encodeURIComponent(branchId),{nominations_open:open,updated_at:nowISO()});
+      const branch=await Data.get('branch:'+branchId);
+      await audit('UPDATE','branch',branchId,(open?'Opened':'Closed')+' nominations for '+(branch?branch.name:branchId));
+      toast('Nominations '+(open?'opened':'closed'));
+      render();
+    }catch(e){ toast('Could not update: '+e.message,true); nomToggle.checked=!open; nomToggle.disabled=false; }
+  });
 }
 async function onAction(e){
   const el=e.currentTarget; const act=el.dataset.act; e.stopPropagation();

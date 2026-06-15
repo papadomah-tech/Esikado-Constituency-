@@ -100,6 +100,7 @@ create table if not exists ndc_branches (
   id          text primary key,
   name        text not null,
   ward_id     text not null references ndc_wards(id) on delete cascade,
+  nominations_open boolean not null default false,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   created_by  text
@@ -182,6 +183,28 @@ create table if not exists ndc_branch_register (
 );
 
 -- -----------------------------------------------------------------
+-- 11. NOMINATIONS
+--     Filed by registered members (verified by registry number against
+--     the Branch Register) for a single branch position. Reviewed by
+--     National Admin / Constituency Admin: pending -> cleared/rejected.
+-- -----------------------------------------------------------------
+create table if not exists ndc_nominations (
+  id           text primary key,
+  branch_id    text not null references ndc_branches(id) on delete cascade,
+  registry_no  text not null,
+  full_name    text not null,
+  phone        text,
+  gender       text,
+  dob          text,
+  position     text not null,
+  status       text not null default 'pending', -- pending | cleared | rejected
+  filed_at     timestamptz not null default now(),
+  reviewed_at  timestamptz,
+  reviewed_by  text,
+  notified_at  timestamptz
+);
+
+-- -----------------------------------------------------------------
 -- 9. Row Level Security — anon key can do everything (app-enforces access)
 --    For a production hardening pass, replace these with role-based policies.
 -- -----------------------------------------------------------------
@@ -194,6 +217,7 @@ alter table ndc_units       enable row level security;
 alter table ndc_executives  enable row level security;
 alter table ndc_audit       enable row level security;
 alter table ndc_branch_register enable row level security;
+alter table ndc_nominations enable row level security;
 
 -- Allow anon role full access (the app handles its own auth)
 create policy "anon_all" on ndc_users      for all to anon using (true) with check (true);
@@ -205,6 +229,7 @@ create policy "anon_all" on ndc_units      for all to anon using (true) with che
 create policy "anon_all" on ndc_executives for all to anon using (true) with check (true);
 create policy "anon_all" on ndc_audit      for all to anon using (true) with check (true);
 create policy "anon_all" on ndc_branch_register for all to anon using (true) with check (true);
+create policy "anon_all" on ndc_nominations for all to anon using (true) with check (true);
 
 -- -----------------------------------------------------------------
 -- Helpful indexes
@@ -217,6 +242,8 @@ create index if not exists idx_branches_ward         on ndc_branches(ward_id);
 create index if not exists idx_units_branch          on ndc_units(branch_id);
 create index if not exists idx_audit_ts              on ndc_audit(ts desc);
 create index if not exists idx_branch_register_branch on ndc_branch_register(branch_id);
+create index if not exists idx_nominations_branch    on ndc_nominations(branch_id);
+create index if not exists idx_nominations_status    on ndc_nominations(status);
 
 -- -----------------------------------------------------------------
 -- Migration for existing deployments: add member_id if this schema
@@ -294,5 +321,33 @@ alter table ndc_branch_register enable row level security;
 drop policy if exists "anon_all" on ndc_branch_register;
 create policy "anon_all" on ndc_branch_register for all to anon using (true) with check (true);
 create index if not exists idx_branch_register_branch on ndc_branch_register(branch_id);
+
+-- -----------------------------------------------------------------
+-- Migration for existing deployments: add the nominations window flag
+-- to ndc_branches and create the nominations table if this schema was
+-- applied before they existed. Safe to re-run.
+-- -----------------------------------------------------------------
+alter table ndc_branches add column if not exists nominations_open boolean not null default false;
+
+create table if not exists ndc_nominations (
+  id           text primary key,
+  branch_id    text not null references ndc_branches(id) on delete cascade,
+  registry_no  text not null,
+  full_name    text not null,
+  phone        text,
+  gender       text,
+  dob          text,
+  position     text not null,
+  status       text not null default 'pending',
+  filed_at     timestamptz not null default now(),
+  reviewed_at  timestamptz,
+  reviewed_by  text,
+  notified_at  timestamptz
+);
+alter table ndc_nominations enable row level security;
+drop policy if exists "anon_all" on ndc_nominations;
+create policy "anon_all" on ndc_nominations for all to anon using (true) with check (true);
+create index if not exists idx_nominations_branch on ndc_nominations(branch_id);
+create index if not exists idx_nominations_status on ndc_nominations(status);
 
 notify pgrst, 'reload schema';

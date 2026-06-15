@@ -47,6 +47,12 @@ A National Admin or Constituency Admin creates new accounts from **Admin, + User
 
 Each branch has its own Branch Register: a list of registered party members at that branch, each assigned an auto-generated registry number (separate from the NDC member ID used for executive records) in the format `MEMBER-<branch>-0001`. The register is opened from the **Branch Register** button on a branch's page, visible to the National Admin, the Constituency Admin for that constituency, and the branch's designated Branch Secretary. Entries record full name, phone, gender, and date of birth, and can be edited or removed at any time.
 
+## Nominations
+
+A National Admin or Constituency Admin can open nominations for a branch from the **Nominations** card on that branch's page. While open, anyone can visit the login page, choose **File a nomination**, select their region, constituency, zonal/electoral area, and branch, and enter their Branch Register registry number to verify their identity. Once verified, they choose one of the branch's nine positions, confirm their phone, gender, and date of birth, and submit. A member cannot file more than one nomination per position, and the form only offers positions they have not already filed for.
+
+Filed nominations appear as **pending** on the branch's **Review nominations** page (National Admin or Constituency Admin only), where each can be **cleared** (confirmed as a candidate) or **rejected**. Cleared candidates get a **Copy message** button that places a ready-to-send notification (confirming the position and branch) on the clipboard, to be pasted into an SMS or WhatsApp message manually; the system marks the candidate as notified once the message has been copied.
+
 ## Registration numbers
 
 Every executive receives a permanent, system-generated registration number, assigned in sequence and never changed:
