@@ -101,6 +101,8 @@ create table if not exists ndc_branches (
   name        text not null,
   ward_id     text not null references ndc_wards(id) on delete cascade,
   nominations_open boolean not null default false,
+  election_cycle  integer not null default 1,
+  election_status text not null default 'pending', -- pending | completed
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   created_by  text
@@ -163,19 +165,28 @@ create table if not exists ndc_audit (
 
 -- -----------------------------------------------------------------
 -- 10. BRANCH REGISTER
---     Register of all party members at branch level, compiled by the
---     Branch Secretary. Each member gets an auto-generated registry
---     number (separate from the NDC member ID used for executives),
---     used to verify identity when filing branch nominations.
+--     Register of all registered party members at branch level,
+--     compiled by the Branch Secretary. Each member gets an
+--     auto-generated registry number (separate from the NDC member
+--     ID below) used to verify identity when filing branch
+--     nominations. This is effectively the branch's pre-executive
+--     member profile: when a member wins a branch election, their
+--     register entry becomes their executive record.
 -- -----------------------------------------------------------------
 create table if not exists ndc_branch_register (
   id           text primary key,
   branch_id    text not null references ndc_branches(id) on delete cascade,
   registry_no  text not null,
   full_name    text not null,
+  member_id    text,
   phone        text,
+  email        text,
   gender       text,
   dob          text,
+  occupation   text,
+  address      text,
+  background   text,
+  photo        text,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   created_by   text,
@@ -205,6 +216,28 @@ create table if not exists ndc_nominations (
 );
 
 -- -----------------------------------------------------------------
+-- 12. ELECTION RESULTS
+--     Vote counts entered by the Branch Secretary for each cleared
+--     candidate, for one election cycle per branch at a time. The
+--     branch's cycle number and status are tracked on ndc_branches
+--     (election_cycle, election_status). Recording results with
+--     status 'completed' creates/updates the winner's executive
+--     record for that position (see app logic).
+-- -----------------------------------------------------------------
+create table if not exists ndc_election_results (
+  id            text primary key,
+  branch_id     text not null references ndc_branches(id) on delete cascade,
+  cycle         integer not null default 1,
+  nomination_id text not null references ndc_nominations(id) on delete cascade,
+  position      text not null,
+  votes         integer not null default 0,
+  is_winner     boolean not null default false,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  unique(branch_id, cycle, nomination_id)
+);
+
+-- -----------------------------------------------------------------
 -- 9. Row Level Security — anon key can do everything (app-enforces access)
 --    For a production hardening pass, replace these with role-based policies.
 -- -----------------------------------------------------------------
@@ -218,8 +251,20 @@ alter table ndc_executives  enable row level security;
 alter table ndc_audit       enable row level security;
 alter table ndc_branch_register enable row level security;
 alter table ndc_nominations enable row level security;
+alter table ndc_election_results enable row level security;
 
 -- Allow anon role full access (the app handles its own auth)
+drop policy if exists "anon_all" on ndc_users;
+drop policy if exists "anon_all" on ndc_settings;
+drop policy if exists "anon_all" on ndc_sequences;
+drop policy if exists "anon_all" on ndc_wards;
+drop policy if exists "anon_all" on ndc_branches;
+drop policy if exists "anon_all" on ndc_units;
+drop policy if exists "anon_all" on ndc_executives;
+drop policy if exists "anon_all" on ndc_audit;
+drop policy if exists "anon_all" on ndc_branch_register;
+drop policy if exists "anon_all" on ndc_nominations;
+drop policy if exists "anon_all" on ndc_election_results;
 create policy "anon_all" on ndc_users      for all to anon using (true) with check (true);
 create policy "anon_all" on ndc_settings   for all to anon using (true) with check (true);
 create policy "anon_all" on ndc_sequences  for all to anon using (true) with check (true);
@@ -230,6 +275,7 @@ create policy "anon_all" on ndc_executives for all to anon using (true) with che
 create policy "anon_all" on ndc_audit      for all to anon using (true) with check (true);
 create policy "anon_all" on ndc_branch_register for all to anon using (true) with check (true);
 create policy "anon_all" on ndc_nominations for all to anon using (true) with check (true);
+create policy "anon_all" on ndc_election_results for all to anon using (true) with check (true);
 
 -- -----------------------------------------------------------------
 -- Helpful indexes
@@ -244,6 +290,7 @@ create index if not exists idx_audit_ts              on ndc_audit(ts desc);
 create index if not exists idx_branch_register_branch on ndc_branch_register(branch_id);
 create index if not exists idx_nominations_branch    on ndc_nominations(branch_id);
 create index if not exists idx_nominations_status    on ndc_nominations(status);
+create index if not exists idx_election_results_branch on ndc_election_results(branch_id, cycle);
 
 -- -----------------------------------------------------------------
 -- Migration for existing deployments: add member_id if this schema
@@ -323,6 +370,18 @@ create policy "anon_all" on ndc_branch_register for all to anon using (true) wit
 create index if not exists idx_branch_register_branch on ndc_branch_register(branch_id);
 
 -- -----------------------------------------------------------------
+-- Migration for existing deployments: expand the Branch Register to a
+-- full member profile (the v5.1 "members become executives on
+-- election" model). Safe to re-run.
+-- -----------------------------------------------------------------
+alter table ndc_branch_register add column if not exists member_id  text;
+alter table ndc_branch_register add column if not exists email      text;
+alter table ndc_branch_register add column if not exists occupation text;
+alter table ndc_branch_register add column if not exists address    text;
+alter table ndc_branch_register add column if not exists background text;
+alter table ndc_branch_register add column if not exists photo      text;
+
+-- -----------------------------------------------------------------
 -- Migration for existing deployments: add the nominations window flag
 -- to ndc_branches and create the nominations table if this schema was
 -- applied before they existed. Safe to re-run.
@@ -349,5 +408,30 @@ drop policy if exists "anon_all" on ndc_nominations;
 create policy "anon_all" on ndc_nominations for all to anon using (true) with check (true);
 create index if not exists idx_nominations_branch on ndc_nominations(branch_id);
 create index if not exists idx_nominations_status on ndc_nominations(status);
+
+-- -----------------------------------------------------------------
+-- Migration for existing deployments: add election cycle tracking to
+-- ndc_branches and create the election results table if this schema
+-- was applied before they existed. Safe to re-run.
+-- -----------------------------------------------------------------
+alter table ndc_branches add column if not exists election_cycle integer not null default 1;
+alter table ndc_branches add column if not exists election_status text not null default 'pending';
+
+create table if not exists ndc_election_results (
+  id            text primary key,
+  branch_id     text not null references ndc_branches(id) on delete cascade,
+  cycle         integer not null default 1,
+  nomination_id text not null references ndc_nominations(id) on delete cascade,
+  position      text not null,
+  votes         integer not null default 0,
+  is_winner     boolean not null default false,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  unique(branch_id, cycle, nomination_id)
+);
+alter table ndc_election_results enable row level security;
+drop policy if exists "anon_all" on ndc_election_results;
+create policy "anon_all" on ndc_election_results for all to anon using (true) with check (true);
+create index if not exists idx_election_results_branch on ndc_election_results(branch_id, cycle);
 
 notify pgrst, 'reload schema';

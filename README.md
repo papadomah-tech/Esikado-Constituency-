@@ -45,13 +45,23 @@ A National Admin or Constituency Admin creates new accounts from **Admin, + User
 
 ## Branch Register
 
-Each branch has its own Branch Register: a list of registered party members at that branch, each assigned an auto-generated registry number (separate from the NDC member ID used for executive records) in the format `MEMBER-<branch>-0001`. The register is opened from the **Branch Register** button on a branch's page, visible to the National Admin, the Constituency Admin for that constituency, and the branch's designated Branch Secretary. Entries record full name, phone, gender, and date of birth, and can be edited or removed at any time.
+Each branch has its own Branch Register: the full profile of every registered party member at that branch, compiled by the Branch Secretary. Each entry has an auto-generated registry number (separate from the NDC member ID) in the format `MEMBER-<branch>-0001`, plus the same profile fields used for executive records: passport photograph, NDC member ID, phone, email, gender, date of birth, occupation, address, and political background. The register is opened from the **Branch Register** button on a branch's page, visible to the National Admin, the Constituency Admin for that constituency, and the branch's designated Branch Secretary. This register is the source of branch executive records: when a registered member wins a branch election, their register profile becomes their executive record.
+
+Branch-level executives are no longer registered manually. A branch's page shows the register and election status instead of an "executives" list; the only way a branch executive record is created or updated is by recording election results (see Branch Elections below).
 
 ## Nominations
 
 A National Admin or Constituency Admin can open nominations for a branch from the **Nominations** card on that branch's page. While open, anyone can visit the login page, choose **File a nomination**, select their region, constituency, zonal/electoral area, and branch, and enter their Branch Register registry number to verify their identity. Once verified, they choose one of the branch's nine positions, confirm their phone, gender, and date of birth, and submit. A member cannot file more than one nomination per position, and the form only offers positions they have not already filed for.
 
 Filed nominations appear as **pending** on the branch's **Review nominations** page (National Admin or Constituency Admin only), where each can be **cleared** (confirmed as a candidate) or **rejected**. Cleared candidates get a **Copy message** button that places a ready-to-send notification (confirming the position and branch) on the clipboard, to be pasted into an SMS or WhatsApp message manually; the system marks the candidate as notified once the message has been copied.
+
+## Branch Elections
+
+Once candidates are cleared, the **Branch election** page (linked from the branch's page, accessible to the National Admin, the Constituency Admin, and the branch's Branch Secretary) lists every cleared candidate grouped by position for the branch's current cycle. The Branch Secretary enters a vote count for each candidate, then clicks **Record results**.
+
+Recording results determines the candidate with the most votes in each position (a tie leaves that position without a recorded winner) and creates or updates that winner's branch executive record using their Branch Register profile — photo, member ID, contact details, occupation, address, and background carry over automatically, and a registration number is assigned the first time. The branch is then marked as having completed that cycle. A **Print report** button produces a printable Branch Election Report listing every candidate's vote count and the winner for each position, with the party motto and slogan.
+
+To run another election later, **Start new cycle** closes the current cycle (its results remain on record) and opens a new one; nominations should be reopened and re-reviewed for the new cycle before recording results again.
 
 ## Registration numbers
 

@@ -204,6 +204,7 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 .album-print-head .ps{font-size:12px;color:var(--muted);margin-top:2px}
 .album-print-head .pm{font-size:11px;font-style:italic;color:var(--muted);margin-top:4px;letter-spacing:.04em}
 .album-print-foot{text-align:center;font-size:13px;font-weight:800;color:var(--green-dark);margin-top:16px;padding-top:8px;border-top:1px solid #ddd}
+.report-row{font-size:13px;margin-top:6px}
 
 @media print{
   @page{margin:12mm}
@@ -309,14 +310,16 @@ function wardToRow(w){
   return {id:w.id, name:w.name, constituency_id:w.constituencyId, code:w.code||null, created_at:w.createdAt||new Date().toISOString(), updated_at:w.updatedAt||new Date().toISOString(), created_by:w.createdBy||null};
 }
 function rowToWard(r){ return {id:r.id, name:r.name, constituencyId:r.constituency_id, code:r.code, type:'ward', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
-function branchToRow(b){ return {id:b.id, name:b.name, ward_id:b.wardId, nominations_open:b.nominationsOpen||false, created_at:b.createdAt||new Date().toISOString(), updated_at:b.updatedAt||new Date().toISOString(), created_by:b.createdBy||null}; }
-function rowToBranch(r){ return {id:r.id, name:r.name, wardId:r.ward_id, nominationsOpen:r.nominations_open||false, type:'branch', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
+function branchToRow(b){ return {id:b.id, name:b.name, ward_id:b.wardId, nominations_open:b.nominationsOpen||false, election_cycle:b.electionCycle||1, election_status:b.electionStatus||'pending', created_at:b.createdAt||new Date().toISOString(), updated_at:b.updatedAt||new Date().toISOString(), created_by:b.createdBy||null}; }
+function rowToBranch(r){ return {id:r.id, name:r.name, wardId:r.ward_id, nominationsOpen:r.nominations_open||false, electionCycle:r.election_cycle||1, electionStatus:r.election_status||'pending', type:'branch', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function unitToRow(u){ return {id:u.id, name:u.name, branch_id:u.branchId, created_at:u.createdAt||new Date().toISOString(), updated_at:u.updatedAt||new Date().toISOString(), created_by:u.createdBy||null}; }
 function rowToUnit(r){ return {id:r.id, name:r.name, branchId:r.branch_id, type:'unit', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
-function regMemberToRow(m){ return {id:m.id, branch_id:m.branchId, registry_no:m.registryNo, full_name:m.fullName, phone:m.phone||null, gender:m.gender||null, dob:m.dob||null, created_at:m.createdAt||new Date().toISOString(), updated_at:new Date().toISOString(), created_by:m.createdBy||null}; }
-function rowToRegMember(r){ return {id:r.id, branchId:r.branch_id, registryNo:r.registry_no, fullName:r.full_name, phone:r.phone, gender:r.gender, dob:r.dob, createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
+function regMemberToRow(m){ return {id:m.id, branch_id:m.branchId, registry_no:m.registryNo, full_name:m.fullName, member_id:m.memberId||null, phone:m.phone||null, email:m.email||null, gender:m.gender||null, dob:m.dob||null, occupation:m.occupation||null, address:m.address||null, background:m.background||null, photo:m.photo||null, created_at:m.createdAt||new Date().toISOString(), updated_at:new Date().toISOString(), created_by:m.createdBy||null}; }
+function rowToRegMember(r){ return {id:r.id, branchId:r.branch_id, registryNo:r.registry_no, fullName:r.full_name, memberId:r.member_id, phone:r.phone, email:r.email, gender:r.gender, dob:r.dob, occupation:r.occupation, address:r.address, background:r.background, photo:r.photo, createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function nominationToRow(n){ return {id:n.id, branch_id:n.branchId, registry_no:n.registryNo, full_name:n.fullName, phone:n.phone||null, gender:n.gender||null, dob:n.dob||null, position:n.position, status:n.status||'pending', filed_at:n.filedAt||new Date().toISOString(), reviewed_at:n.reviewedAt||null, reviewed_by:n.reviewedBy||null, notified_at:n.notifiedAt||null}; }
 function rowToNomination(r){ return {id:r.id, branchId:r.branch_id, registryNo:r.registry_no, fullName:r.full_name, phone:r.phone, gender:r.gender, dob:r.dob, position:r.position, status:r.status, filedAt:r.filed_at, reviewedAt:r.reviewed_at, reviewedBy:r.reviewed_by, notifiedAt:r.notified_at}; }
+function resultToRow(x){ return {id:x.id, branch_id:x.branchId, cycle:x.cycle||1, nomination_id:x.nominationId, position:x.position, votes:x.votes||0, is_winner:x.isWinner||false, created_at:x.createdAt||new Date().toISOString(), updated_at:new Date().toISOString()}; }
+function rowToResult(r){ return {id:r.id, branchId:r.branch_id, cycle:r.cycle, nominationId:r.nomination_id, position:r.position, votes:r.votes||0, isWinner:r.is_winner||false, createdAt:r.created_at, updatedAt:r.updated_at}; }
 function userToRow(u){
   return {id:u.id||u.username, username:u.username, password:u.password, full_name:u.fullName||u.username, role:u.role, scope_constituency_id:u.scopeConstituencyId||null, scope_constituency_name:u.scopeConstituencyName||null, scope_branch_id:u.scopeBranchId||null, scope_branch_name:u.scopeBranchName||null, is_branch_secretary:u.isBranchSecretary||false, must_change_password:u.mustChangePassword||false, suspended:u.suspended||false, created_by:u.createdBy||null, updated_at:new Date().toISOString()};
 }
@@ -564,6 +567,7 @@ const Data = {
   },
   branchRegister: async (branchId)=>{ const r=await SB.select('ndc_branch_register','branch_id=eq.'+encodeURIComponent(branchId)+'&order=registry_no.asc'); return (r||[]).map(rowToRegMember); },
   nominations: async (branchId)=>{ const r=await SB.select('ndc_nominations','branch_id=eq.'+encodeURIComponent(branchId)+'&order=filed_at.asc'); return (r||[]).map(rowToNomination); },
+  electionResults: async (branchId, cycle)=>{ const r=await SB.select('ndc_election_results','branch_id=eq.'+encodeURIComponent(branchId)+'&cycle=eq.'+encodeURIComponent(cycle)+'&order=position.asc'); return (r||[]).map(rowToResult); },
   // Legacy single-record lookups used by viewExecProfile and constituencyIdOf
   get: async (k)=>{
     try{
@@ -647,8 +651,13 @@ async function _render(){
     else if(route==='ward'){ c.innerHTML = await viewOrgDetail('ward', parts[1]); }
     else if(route==='branch'){ c.innerHTML = await viewOrgDetail('branch', parts[1]); }
     else if(route==='unit'){ c.innerHTML = await viewOrgDetail('unit', parts[1]); }
-    else if(route==='register'){ c.innerHTML = await viewBranchRegister(parts[1]); wireBranchRegister(parts[1]); }
+    else if(route==='register'){
+      if(parts[2]==='member' && parts[3]==='new'){ c.innerHTML = await viewRegMemberForm(parts[1], null); wireRegMemberForm(); }
+      else if(parts[2]==='member' && parts[4]==='edit'){ c.innerHTML = await viewRegMemberForm(parts[1], parts[3]); wireRegMemberForm(); }
+      else { c.innerHTML = await viewBranchRegister(parts[1]); wireBranchRegister(parts[1]); }
+    }
     else if(route==='nominations'){ c.innerHTML = await viewNominationsReview(parts[1]); wireNominationsReview(parts[1]); }
+    else if(route==='election'){ c.innerHTML = await viewBranchElection(parts[1]); wireBranchElection(parts[1]); }
     else if(route==='exec'){
       if(parts[1]==='new'){ c.innerHTML = await viewExecForm(null,q); wireExecForm(); }
       else if(parts[2]==='edit'){ c.innerHTML = await viewExecForm(parts[1],q); wireExecForm(); }
@@ -1154,6 +1163,7 @@ async function viewOrgDetail(level, id){
     ${can('delete')?`<button class="btn sm danger" data-act="delOrg" data-level="${level}" data-id="${id}">Delete</button>`:''}
   </div>
 
+  ${level!=='branch'? `
   <div class="card pad">
     <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">${LVS[level]} executives</h3><span class="badge k">${ownExecs.length}</span><span class="spacer"></span>
       ${can('create')?`<button class="btn primary sm" data-link="#/exec/new?level=${level}&parent=${id}">＋ Add</button>`:''}
@@ -1162,9 +1172,21 @@ async function viewOrgDetail(level, id){
       <div class="pip-row">${slate.map(p=>`<span class="pip ${filled.has(p)?'on':''}" title="${esc(p)}${filled.has(p)?' — filled':' — vacant'}"></span>`).join('')}</div>
     </div>
     ${ownExecs.length? `<div class="list" style="margin-top:6px">`+ownExecs.map(execItem).join('')+`</div>` : '<p class="muted small" style="margin:6px 0 0">No executives registered at this level yet.</p>'}
-  </div>
+  </div>` : `
+  <div class="card pad">
+    <p class="muted small" style="margin:0">Branch executives are determined by election results. Compile the Branch Register, open nominations, then record election results to populate this branch's executive positions.</p>
+  </div>`}
 
   ${(level==='branch'&&canManageNominations())? await branchNominationsCard(node) : ''}
+
+  ${(level==='branch'&&!canManageNominations()&&isBranchSecretaryFor(id))? `
+  <div class="card pad" style="margin-top:14px">
+    <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Branch election</h3><span class="spacer"></span>
+      <span class="tiny muted">${node.electionStatus==='completed' ? 'Cycle '+node.electionCycle+' — results recorded' : 'Cycle '+node.electionCycle+' — awaiting results'}</span>
+    </div>
+    <p class="muted small" style="margin:0 0 10px">Once nominations are cleared, enter vote counts here to record the branch election results.</p>
+    <button class="btn sm" data-link="#/election/${id}">🗳️ Branch election</button>
+  </div>` : ''}
 
   ${childLevel? `
   <div class="card pad" style="margin-top:14px">
@@ -1193,6 +1215,7 @@ async function branchNominationsCard(branch){
   const noms = await Data.nominations(branch.id);
   const pending = noms.filter(n=>n.status==='pending').length;
   const cleared = noms.filter(n=>n.status==='cleared').length;
+  const cycleLabel = branch.electionStatus==='completed' ? 'Cycle '+branch.electionCycle+' — results recorded' : 'Cycle '+branch.electionCycle+' — awaiting results';
   return `
   <div class="card pad" style="margin-top:14px">
     <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Nominations</h3><span class="spacer"></span>
@@ -1205,7 +1228,11 @@ async function branchNominationsCard(branch){
       <span class="badge ${pending?'y':''}">${pending}</span><span>pending review</span>
       <span class="badge k" style="margin-left:14px">${cleared}</span><span>cleared candidate(s)</span>
     </div>
-    <button class="btn sm" data-link="#/nominations/${branch.id}">📝 Review nominations</button>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <button class="btn sm" data-link="#/nominations/${branch.id}">📝 Review nominations</button>
+      <button class="btn sm" data-link="#/election/${branch.id}">🗳️ Branch election</button>
+      <span class="tiny muted" style="margin-left:auto;align-self:center">${esc(cycleLabel)}</span>
+    </div>
   </div>`;
 }
 async function buildCrumb(level,node){
@@ -1237,17 +1264,16 @@ async function viewBranchRegister(branchId){
   return `
   <div class="crumb"><a href="#/branch/${branchId}">‹ ${esc(branch.name)}</a></div>
   <div class="section-head"><h2>Branch Register</h2><span class="sub">${esc(branch.name)}</span><span class="spacer"></span>
-    <button class="btn sm primary" data-act="addMember">＋ Add member</button>
+    <button class="btn sm primary" data-link="#/register/${branchId}/member/new">＋ Add member</button>
   </div>
 
   <div class="card pad">
-    <p class="muted small" style="margin:0 0 10px">Every registered party member at this branch, with an auto-generated registry number. This list is used to verify identity when members file nominations for branch positions.</p>
+    <p class="muted small" style="margin:0 0 10px">Every registered party member at this branch, with an auto-generated registry number. This list is used to verify identity when members file nominations for branch positions, and becomes the source of branch executive records once a member wins an election.</p>
     ${members.length? `<div class="list">`+members.map(m=>`
-      <div class="item" data-id="${esc(m.id)}">
-        <div class="av">${initials(m.fullName)}</div>
-        <div class="body"><div class="nm">${esc(m.fullName)} <span class="reg">${esc(m.registryNo)}</span></div><div class="mt">${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))} • ${esc(m.phone||'—')}${m.dob?' • '+fmtDate(m.dob):''}</div></div>
-        <button class="btn sm" data-act="editMember" data-id="${esc(m.id)}">Edit</button>
-        <button class="btn sm danger" data-act="delMember" data-id="${esc(m.id)}">✕</button>
+      <div class="item" data-link="#/register/${branchId}/member/${esc(m.id)}/edit">
+        <div class="av">${m.photo?`<img src="${m.photo}" alt="">`:initials(m.fullName)}</div>
+        <div class="body"><div class="nm">${esc(m.fullName)} <span class="reg">${esc(m.registryNo)}</span></div><div class="mt">${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))} • ${esc(m.phone||'—')}${m.dob?' • '+fmtDate(m.dob):''}${m.memberId?' • '+esc(m.memberId):''}</div></div>
+        <div class="chev">›</div>
       </div>`).join('')+`</div>` : `<p class="muted small" style="margin:0">No members registered yet. Use ＋ Add member to begin compiling the register.</p>`}
   </div>
 
@@ -1256,61 +1282,112 @@ async function viewBranchRegister(branchId){
     <p class="muted small" style="margin:0"><b>${members.length}</b> member(s) on the register for ${esc(branch.name)}.</p>
   </div>`;
 }
-function wireBranchRegister(branchId){
-  const memberForm = (existing)=>`
-    <div class="field"><label>Full name <span class="req">*</span></label><input id="mFullName" value="${existing?esc(existing.fullName):''}"></div>
-    <div class="field"><label>Phone</label><input id="mPhone" value="${existing?esc(existing.phone||''):''}"></div>
-    <div class="field"><label>Gender</label><select id="mGender">
-      <option value="">Select…</option>
-      <option value="male" ${existing&&existing.gender==='male'?'selected':''}>Male</option>
-      <option value="female" ${existing&&existing.gender==='female'?'selected':''}>Female</option>
-    </select></div>
-    <div class="field"><label>Date of birth</label><input id="mDob" type="date" value="${existing?esc(existing.dob||''):''}"></div>
-    ${existing?`<p class="muted small" style="margin:0 0 8px">Registry number: <b>${esc(existing.registryNo)}</b> (assigned, cannot be changed)</p>`:'<p class="muted small" style="margin:0 0 8px">A registry number will be assigned automatically on save.</p>'}`;
+function wireBranchRegister(branchId){ /* list page uses data-link navigation only */ }
 
-  $('[data-act=addMember]').onclick=async()=>{
-    const r=await modalForm('Add member', memberForm(null));
-    if(!r.ok) return;
-    const fullName=$('#mFullName').value.trim();
-    if(!fullName){ toast('Full name is required',true); return; }
-    const rec={
-      id:uid(), branchId, fullName,
-      phone:$('#mPhone').value.trim(), gender:$('#mGender').value, dob:$('#mDob').value,
-      createdBy:State.session.username,
-    };
-    rec.registryNo = await nextBranchRegistryNo(branchId);
-    r.el.remove();
-    await SB.upsert('ndc_branch_register', regMemberToRow(rec));
-    await audit('CREATE','branch_register',rec.id,'Added '+fullName+' to branch register ['+rec.registryNo+']');
-    toast('Member added — '+rec.registryNo); render();
+/* ============================================================
+   BRANCH REGISTER — member form (create/edit)
+   Mirrors the executive registration form: photo, NDC member ID,
+   contact details, occupation, address, and background. This is
+   the member's profile, which becomes their executive record if
+   they later win a branch election.
+   ============================================================ */
+async function viewRegMemberForm(branchId, memberId){
+  const branch = await Data.get('branch:'+branchId);
+  if(!branch) return emptyState('🚫','Not found','This branch may have been deleted.');
+  const conId = await constituencyIdOf(branch);
+  if(!inScope(conId)) return denyView();
+  if(!canManageRegister(branchId)) return denyView();
+  let m = null;
+  if(memberId){ const members = await Data.branchRegister(branchId); m = members.find(x=>x.id===memberId)||null; if(!m) return emptyState('🚫','Not found','This member may have been removed from the register.'); }
+
+  return `
+  <div class="crumb"><a href="#/register/${branchId}">‹ ${esc(branch.name)} Register</a></div>
+  <div class="section-head"><h2>${m?'Edit':'Add'} register member</h2><span class="sub">${esc(branch.name)}</span></div>
+  <form id="regMemberForm" class="card pad" data-branch="${branchId}" data-id="${memberId||''}">
+    <div class="field"><label>Registry number</label>
+      <input value="${m?esc(m.registryNo):''}" readonly placeholder="Assigned automatically on save" style="background:var(--green-soft);color:var(--green-dark);font-weight:700;letter-spacing:.04em">
+    </div>
+    <div class="field"><label>Passport photograph <span class="req">*</span></label>
+      <div class="photo-box">
+        <label class="photo-prev" id="photoPrev">${m&&m.photo?`<img src="${m.photo}">`:'<span>No photo<br>added</span>'}</label>
+        <div class="photo-actions">
+          <button type="button" class="btn sm" data-act="takePhoto">📷 Take photo</button>
+          <button type="button" class="btn sm" data-act="pickPhoto">🖼️ Choose from gallery</button>
+          <span class="tiny muted">Compressed automatically before saving.</span>
+        </div>
+      </div>
+      <input type="file" id="camIn" accept="image/*" capture="environment" class="hidden">
+      <input type="file" id="galIn" accept="image/*" class="hidden">
+      <input type="hidden" id="photoData" value="${m&&m.photo?m.photo:''}">
+      <div class="err hidden" id="photoErr">Photo is required.</div>
+    </div>
+
+    ${textField('fullName','Full name',m&&m.fullName,true)}
+    ${textField('memberId','NDC member ID number',m&&m.memberId,true)}
+    <div class="grid2">
+      ${selectField('gender','Gender',[{v:'male',t:'Male'},{v:'female',t:'Female'}],m&&m.gender,true)}
+      ${textField('phone','Phone number',m&&m.phone,true,'tel')}
+    </div>
+    <div class="grid2">
+      ${textField('email','Email',m&&m.email,false,'email')}
+      ${textField('dob','Date of birth',m&&m.dob,false,'date')}
+    </div>
+    ${textField('occupation','Occupation',m&&m.occupation,false)}
+    ${textareaField('address','Residential address',m&&m.address)}
+    ${textareaField('background','Political experience / background',m&&m.background)}
+
+    <div class="row" style="margin-top:6px">
+      <button type="button" class="btn primary" data-act="saveRegMember">${m?'Save changes':'Add to register'}</button>
+      <button type="button" class="btn ghost" data-act="cancel">Cancel</button>
+      ${m?`<span class="spacer"></span><button type="button" class="btn danger" data-act="delRegMember">Remove</button>`:''}
+    </div>
+  </form>`;
+}
+function wireRegMemberForm(){
+  const form=$('#regMemberForm'); if(!form) return;
+  const cam=$('#camIn'), gal=$('#galIn');
+  const take=$('[data-act=takePhoto]'); if(take) take.onclick=()=>cam.click();
+  const pick=$('[data-act=pickPhoto]'); if(pick) pick.onclick=()=>gal.click();
+  const onPick = async (file)=>{ if(!file) return; try{ const data=await compressImage(file); $('#photoData').value=data; $('#photoPrev').innerHTML=`<img src="${data}">`; $('#photoErr').classList.add('hidden'); }catch{ toast('Could not read that image',true); } };
+  if(cam) cam.onchange=e=>onPick(e.target.files[0]);
+  if(gal) gal.onchange=e=>onPick(e.target.files[0]);
+  const cancel=$('[data-act=cancel]'); if(cancel) cancel.onclick=()=>history.back();
+  const save=$('[data-act=saveRegMember]'); if(save) save.onclick=saveRegMember;
+  const del=$('[data-act=delRegMember]'); if(del) del.onclick=delRegMember;
+}
+async function saveRegMember(){
+  const form=$('#regMemberForm'); const branchId=form.dataset.branch; const id=form.dataset.id;
+  const photo=$('#photoData').value;
+  const rec={
+    fullName:fieldVal('fullName'), memberId:fieldVal('memberId'), gender:fieldVal('gender'),
+    phone:fieldVal('phone'), email:fieldVal('email'), dob:fieldVal('dob'),
+    occupation:fieldVal('occupation'), address:fieldVal('address'), background:fieldVal('background'),
+    photo, branchId,
   };
+  let ok=true;
+  const required=['fullName','memberId','gender','phone'];
+  required.forEach(f=>{ const bad=!rec[f]; setBad(f,bad); if(bad) ok=false; });
+  if(!photo){ $('#photoErr').classList.remove('hidden'); ok=false; } else { $('#photoErr').classList.add('hidden'); }
+  if(!ok){ toast('Please complete the required fields',true); return; }
 
-  document.querySelectorAll('[data-act=editMember]').forEach(b=>b.onclick=async()=>{
-    const members = await Data.branchRegister(branchId);
-    const existing = members.find(m=>m.id===b.dataset.id);
-    if(!existing) return;
-    const r=await modalForm('Edit member', memberForm(existing));
-    if(!r.ok) return;
-    const fullName=$('#mFullName').value.trim();
-    if(!fullName){ toast('Full name is required',true); return; }
-    const rec=Object.assign({}, existing, {
-      fullName, phone:$('#mPhone').value.trim(), gender:$('#mGender').value, dob:$('#mDob').value,
-    });
-    r.el.remove();
-    await SB.upsert('ndc_branch_register', regMemberToRow(rec));
-    await audit('UPDATE','branch_register',rec.id,'Updated '+fullName+' ['+rec.registryNo+']');
-    toast('Saved'); render();
-  });
-
-  document.querySelectorAll('[data-act=delMember]').forEach(b=>b.onclick=async()=>{
-    const members = await Data.branchRegister(branchId);
-    const existing = members.find(m=>m.id===b.dataset.id);
-    const go=await confirmModal('Remove member?', 'This removes '+(existing?existing.fullName:'this member')+' from the branch register. This cannot be undone.');
-    if(!go) return;
-    await SB.delete('ndc_branch_register','id=eq.'+encodeURIComponent(b.dataset.id));
-    await audit('DELETE','branch_register',b.dataset.id,'Removed '+(existing?existing.fullName+' ['+existing.registryNo+']':'member')+' from branch register');
-    toast('Removed'); render();
-  });
+  const existing = id? (await Data.branchRegister(branchId)).find(x=>x.id===id) : null;
+  const final = Object.assign({}, existing||{}, rec, {id:id||uid(), updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO(), createdBy:(existing&&existing.createdBy)||State.session.username});
+  if(!existing){ final.registryNo = await nextBranchRegistryNo(branchId); }
+  await SB.upsert('ndc_branch_register', regMemberToRow(final));
+  await audit(id?'UPDATE':'CREATE','branch_register',final.id,(id?'Updated ':'Added ')+rec.fullName+' ['+final.registryNo+'] to branch register');
+  toast(id?'Changes saved':'Member added — '+final.registryNo);
+  location.hash = '#/register/'+branchId; render();
+}
+async function delRegMember(){
+  const form=$('#regMemberForm'); const branchId=form.dataset.branch; const id=form.dataset.id;
+  const members = await Data.branchRegister(branchId);
+  const existing = members.find(m=>m.id===id);
+  const go=await confirmModal('Remove member?', 'This removes '+(existing?existing.fullName:'this member')+' from the branch register. This cannot be undone.');
+  if(!go) return;
+  await SB.delete('ndc_branch_register','id=eq.'+encodeURIComponent(id));
+  await audit('DELETE','branch_register',id,'Removed '+(existing?existing.fullName+' ['+existing.registryNo+']':'member')+' from branch register');
+  toast('Removed');
+  location.hash = '#/register/'+branchId; render();
 }
 
 /* ============================================================
@@ -1405,12 +1482,178 @@ function wireNominationsReview(branchId){
 }
 
 /* ============================================================
+   BRANCH ELECTIONS
+   The Branch Secretary (or National/Constituency Admin) records
+   vote counts for cleared candidates, grouped by position. Saving
+   determines the winner per position and creates/updates that
+   winner's executive record from their Branch Register profile.
+   One active cycle per branch at a time; a new cycle can be
+   started once results are recorded.
+   ============================================================ */
+function slugify(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+async function viewBranchElection(branchId){
+  const branch = await Data.get('branch:'+branchId);
+  if(!branch) return emptyState('🚫','Not found','This branch may have been deleted.');
+  const conId = await constituencyIdOf(branch);
+  if(!inScope(conId)) return denyView();
+  if(!canManageRegister(branchId)) return denyView();
+
+  const positions = posForLevel(await Data.positions(),'branch');
+  const noms = await Data.nominations(branchId);
+  const cleared = noms.filter(n=>n.status==='cleared');
+  const results = await Data.electionResults(branchId, branch.electionCycle);
+  const resultByNom = {}; results.forEach(r=>resultByNom[r.nominationId]=r);
+  const completed = branch.electionStatus==='completed';
+
+  const positionBlock = (position)=>{
+    const candidates = cleared.filter(n=>n.position===position);
+    if(!candidates.length) return `
+      <div class="card pad" style="margin-top:14px">
+        <h3 style="font-size:15px;margin-bottom:6px">${esc(position)}</h3>
+        <p class="muted small" style="margin:0">No cleared candidates for this position.</p>
+      </div>`;
+    return `
+      <div class="card pad" style="margin-top:14px">
+        <h3 style="font-size:15px;margin-bottom:8px">${esc(position)}</h3>
+        <div class="list">${candidates.map(n=>{
+          const r=resultByNom[n.id];
+          const isWinner = r&&r.isWinner;
+          return `
+          <div class="item">
+            <div class="av">${initials(n.fullName)}</div>
+            <div class="body"><div class="nm">${esc(n.fullName)} <span class="reg">${esc(n.registryNo)}</span>${isWinner?' <span class="badge y">Winner</span>':''}</div><div class="mt">${esc(n.phone||'—')}</div></div>
+            <div class="field" style="margin:0;width:110px" data-f="votes-${esc(n.id)}">
+              <input type="number" min="0" id="votes-${esc(n.id)}" data-position="${esc(position)}" data-nom="${esc(n.id)}" value="${r?r.votes:0}" ${completed?'readonly':''} placeholder="Votes">
+            </div>
+          </div>`;
+        }).join('')}</div>
+      </div>`;
+  };
+
+  return `
+  <div class="crumb no-print"><a href="#/branch/${branchId}">‹ ${esc(branch.name)}</a></div>
+  <div class="section-head no-print"><h2>Branch Election</h2><span class="sub">${esc(branch.name)} • Cycle ${branch.electionCycle}</span></div>
+
+  <div class="card pad no-print">
+    <p class="muted small" style="margin:0 0 10px">${completed
+      ? 'Results have been recorded for this cycle. Winners shown below have been added as branch executives. Start a new cycle to run another election.'
+      : 'Enter the vote count for each cleared candidate, then record results. The candidate with the most votes in each position becomes that position\u2019s branch executive.'}</p>
+    ${completed
+      ? `<button class="btn sm" data-act="newCycle">🔄 Start new cycle</button>`
+      : `<button class="btn primary sm" data-act="recordResults">✅ Record results</button>`}
+    <button class="btn sm" data-act="printReport" style="margin-left:8px">🖨️ Print report</button>
+  </div>
+
+  <div class="no-print">${positions.map(positionBlock).join('')}</div>
+
+  <div class="album-print-head print-only">
+    <img src="${LOGO_FULL}" alt="NDC">
+    <div class="pt">${esc(branch.name)} — Branch Election Report</div>
+    <div class="ps">Cycle ${branch.electionCycle}${completed?' — Results recorded':''}</div>
+    <div class="pm">${esc(PARTY_MOTTO)}</div>
+  </div>
+  <div class="print-only" id="electionPrintTable">
+    ${positions.map(position=>{
+      const candidates = cleared.filter(n=>n.position===position);
+      if(!candidates.length) return `<div class="report-row"><b>${esc(position)}</b>: no cleared candidates</div>`;
+      return `<div class="report-row" style="margin-top:8px"><b>${esc(position)}</b><table style="width:100%;border-collapse:collapse;margin-top:4px">${candidates.map(n=>{
+        const r=resultByNom[n.id];
+        return `<tr style="border-bottom:1px solid #ddd"><td style="padding:3px 0">${esc(n.fullName)} (${esc(n.registryNo)})${r&&r.isWinner?' — WINNER':''}</td><td style="text-align:right;padding:3px 0">${r?r.votes:0} vote(s)</td></tr>`;
+      }).join('')}</table></div>`;
+    }).join('')}
+    <div class="album-print-foot">${esc(PARTY_SLOGAN)}</div>
+  </div>
+  `;
+}
+function wireBranchElection(branchId){
+  const recordBtn = $('[data-act=recordResults]');
+  if(recordBtn) recordBtn.onclick = async()=>{
+    const branch = await Data.get('branch:'+branchId);
+    const positions = posForLevel(await Data.positions(),'branch');
+    const noms = await Data.nominations(branchId);
+    const cleared = noms.filter(n=>n.status==='cleared');
+    const members = await Data.branchRegister(branchId);
+    const memberByReg = {}; members.forEach(m=>memberByReg[m.registryNo]=m);
+
+    const go = await confirmModal('Record election results?', 'This determines the winner for each position from the vote counts entered, and adds each winner as a branch executive. This can be redone later by starting a new cycle.');
+    if(!go) return;
+
+    let winnersCreated = 0;
+    const ties = [];
+    for(const position of positions){
+      const candidates = cleared.filter(n=>n.position===position);
+      if(!candidates.length) continue;
+      // Read vote counts from the form
+      const tallies = candidates.map(n=>{
+        const input = $('#votes-'+n.id);
+        const votes = input ? Math.max(0, parseInt(input.value,10)||0) : 0;
+        return {nom:n, votes};
+      });
+      const maxVotes = Math.max(...tallies.map(t=>t.votes));
+      const winners = tallies.filter(t=>t.votes===maxVotes && maxVotes>0);
+      // Save a result row for every candidate (winner flag only set if exactly one winner)
+      const singleWinner = winners.length===1 ? winners[0] : null;
+      if(winners.length>1) ties.push(position);
+      for(const t of tallies){
+        const rec = {
+          id: branchId+'-c'+(branch.electionCycle||1)+'-'+t.nom.id,
+          branchId, cycle:branch.electionCycle, nominationId:t.nom.id, position,
+          votes:t.votes, isWinner: !!(singleWinner && singleWinner.nom.id===t.nom.id),
+        };
+        await SB.upsert('ndc_election_results', resultToRow(rec));
+      }
+      if(singleWinner){
+        const member = memberByReg[singleWinner.nom.registryNo];
+        if(member){
+          const execId = 'branch-'+branchId+'-'+slugify(position);
+          const execRec = {
+            id: execId, level:'branch', branchId, position,
+            fullName: member.fullName, memberId: member.memberId, gender: member.gender,
+            phone: member.phone, email: member.email, dob: member.dob,
+            occupation: member.occupation, address: member.address, background: member.background,
+            photo: member.photo, status:'active',
+            createdAt: nowISO(), updatedAt: nowISO(), createdBy: State.session.username,
+          };
+          // Preserve an existing registration number if this position already has a record (re-run election)
+          const existing = await SB.select('ndc_executives','id=eq.'+encodeURIComponent(execId)+'&limit=1');
+          if(existing && existing[0]){ execRec.regNo = existing[0].reg_no; execRec.createdAt = existing[0].created_at; }
+          else { execRec.regNo = await nextRegNo(await prefixForExec({level:'branch',branchId})); winnersCreated++; }
+          await SB.upsert('ndc_executives', execToRow(execRec));
+        }
+      }
+    }
+    await SB.update('ndc_branches','id=eq.'+encodeURIComponent(branchId),{election_status:'completed',updated_at:nowISO()});
+    const tieNote = ties.length? ' — tie (no winner recorded) for: '+ties.join(', ') : '';
+    await audit('UPDATE','branch',branchId,'Recorded election results for cycle '+branch.electionCycle+' ('+winnersCreated+' new executive(s))'+tieNote);
+    if(ties.length) toast('Results recorded — tie for '+ties.join(', ')+'; no winner set for those position(s)',true);
+    else toast('Results recorded');
+    render();
+  };
+
+  const newCycleBtn = $('[data-act=newCycle]');
+  if(newCycleBtn) newCycleBtn.onclick = async()=>{
+    const branch = await Data.get('branch:'+branchId);
+    const go = await confirmModal('Start a new election cycle?', 'This closes cycle '+branch.electionCycle+' and starts cycle '+(branch.electionCycle+1)+'. Existing results remain on record. Nominations should be reopened and re-reviewed for the new cycle.');
+    if(!go) return;
+    await SB.update('ndc_branches','id=eq.'+encodeURIComponent(branchId),{election_cycle:branch.electionCycle+1, election_status:'pending', nominations_open:false, updated_at:nowISO()});
+    await audit('UPDATE','branch',branchId,'Started election cycle '+(branch.electionCycle+1));
+    toast('New cycle started'); render();
+  };
+
+  const printBtn = $('[data-act=printReport]');
+  if(printBtn) printBtn.onclick = ()=> window.print();
+}
+
+/* ============================================================
    EXECUTIVE — form (create/edit)
    ============================================================ */
 async function viewExecForm(execId, q){
   const positions = await Data.positions();
   let e = execId? await Data.get('exec:'+execId) : null;
   const level = e? e.level : (q.level||'ward');
+  // Branch executives are no longer registered manually — they are created
+  // automatically from election results (see Branch Register / Elections).
+  if(!e && level==='branch') return emptyState('🚫','Not available','Branch executives are determined by election results. Compile the Branch Register, open nominations, then record election results.');
   const parentId = e? e[level+'Id'] : (q.parent||'');
   const slate = posForLevel(positions, level);
 
@@ -1952,7 +2195,7 @@ async function importCSV(file){
     const row=rows[r]; if(!row.length||!(row[idx.fullName]||'').trim()) continue;
     const get=(k)=>(idx[k]>=0?(row[idx[k]]||'').trim():'');
     const level=get('level').toLowerCase();
-    if(!['region','constituency','ward','branch'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level`); continue; }
+    if(!['region','constituency','ward'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level (branch executives are determined by election results and cannot be imported)`); continue; }
     if(!get('fullName')||!get('memberId')||!get('position')||!get('gender')||!get('phone')){ fail++; errs.push(`Row ${r+1}: missing required field`); continue; }
     const regionIdHint = findRegion(get('region'));
     if(level==='region'){
