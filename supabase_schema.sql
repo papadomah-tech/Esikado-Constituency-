@@ -18,6 +18,9 @@ create table if not exists ndc_users (
   role          text not null default 'viewer',
   scope_constituency_id   text,
   scope_constituency_name text,
+  scope_branch_id   text,
+  scope_branch_name text,
+  is_branch_secretary boolean not null default false,
   must_change_password    boolean not null default false,
   suspended     boolean not null default false,
   created_by    text,
@@ -158,6 +161,27 @@ create table if not exists ndc_audit (
 );
 
 -- -----------------------------------------------------------------
+-- 10. BRANCH REGISTER
+--     Register of all party members at branch level, compiled by the
+--     Branch Secretary. Each member gets an auto-generated registry
+--     number (separate from the NDC member ID used for executives),
+--     used to verify identity when filing branch nominations.
+-- -----------------------------------------------------------------
+create table if not exists ndc_branch_register (
+  id           text primary key,
+  branch_id    text not null references ndc_branches(id) on delete cascade,
+  registry_no  text not null,
+  full_name    text not null,
+  phone        text,
+  gender       text,
+  dob          text,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  created_by   text,
+  unique(branch_id, registry_no)
+);
+
+-- -----------------------------------------------------------------
 -- 9. Row Level Security — anon key can do everything (app-enforces access)
 --    For a production hardening pass, replace these with role-based policies.
 -- -----------------------------------------------------------------
@@ -169,6 +193,7 @@ alter table ndc_branches    enable row level security;
 alter table ndc_units       enable row level security;
 alter table ndc_executives  enable row level security;
 alter table ndc_audit       enable row level security;
+alter table ndc_branch_register enable row level security;
 
 -- Allow anon role full access (the app handles its own auth)
 create policy "anon_all" on ndc_users      for all to anon using (true) with check (true);
@@ -179,6 +204,7 @@ create policy "anon_all" on ndc_branches   for all to anon using (true) with che
 create policy "anon_all" on ndc_units      for all to anon using (true) with check (true);
 create policy "anon_all" on ndc_executives for all to anon using (true) with check (true);
 create policy "anon_all" on ndc_audit      for all to anon using (true) with check (true);
+create policy "anon_all" on ndc_branch_register for all to anon using (true) with check (true);
 
 -- -----------------------------------------------------------------
 -- Helpful indexes
@@ -190,6 +216,7 @@ create index if not exists idx_wards_constituency    on ndc_wards(constituency_i
 create index if not exists idx_branches_ward         on ndc_branches(ward_id);
 create index if not exists idx_units_branch          on ndc_units(branch_id);
 create index if not exists idx_audit_ts              on ndc_audit(ts desc);
+create index if not exists idx_branch_register_branch on ndc_branch_register(branch_id);
 
 -- -----------------------------------------------------------------
 -- Migration for existing deployments: add member_id if this schema
@@ -240,5 +267,32 @@ update ndc_settings set value = '[
   {"title":"Executive Member 2","levels":["branch"]}
 ]'::jsonb
 where key = 'positions';
+
+-- -----------------------------------------------------------------
+-- Migration for existing deployments: add Branch Secretary scoping to
+-- ndc_users and create the Branch Register table if this schema was
+-- applied before they existed. Safe to re-run.
+-- -----------------------------------------------------------------
+alter table ndc_users add column if not exists scope_branch_id text;
+alter table ndc_users add column if not exists scope_branch_name text;
+alter table ndc_users add column if not exists is_branch_secretary boolean not null default false;
+
+create table if not exists ndc_branch_register (
+  id           text primary key,
+  branch_id    text not null references ndc_branches(id) on delete cascade,
+  registry_no  text not null,
+  full_name    text not null,
+  phone        text,
+  gender       text,
+  dob          text,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  created_by   text,
+  unique(branch_id, registry_no)
+);
+alter table ndc_branch_register enable row level security;
+drop policy if exists "anon_all" on ndc_branch_register;
+create policy "anon_all" on ndc_branch_register for all to anon using (true) with check (true);
+create index if not exists idx_branch_register_branch on ndc_branch_register(branch_id);
 
 notify pgrst, 'reload schema';

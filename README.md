@@ -38,9 +38,14 @@ To change your own password later, use the account icon (👤) in the top bar.
 | **National Admin** | Sees and manages the whole country: all 16 regions, all 276 constituencies, region-level executives, and user accounts (suspend, reset, or delete any account). |
 | **Constituency Admin** | Scoped to one constituency: its executives, zonal/electoral areas, branches, search, reports, and album. Can also create and manage user accounts (any non-national role, including other Constituency Admins) for that constituency. |
 | **Zonal/Electoral Area Admin / Branch Admin** | Standard create/edit access within their constituency's scope. |
+| **Branch Secretary** | An additional flag on a Branch Admin account, scoped to one specific branch. Grants access to that branch's Branch Register (the list of registered party members used for nomination verification), in addition to the normal Branch Admin access. |
 | **Viewer** | Read-only access and exports within their scope. |
 
-A National Admin or Constituency Admin creates new accounts from **Admin, + User**, choosing a role and a temporary password; the new user must set their own password the first time they sign in. Scoped users who try to open another region's or constituency's records see an "Outside your access" message. Accounts can be suspended (blocking login with a message), have their password reset (forcing a new password on next sign in), or be deleted from the Admin page.
+A National Admin or Constituency Admin creates new accounts from **Admin, + User**, choosing a role and a temporary password; the new user must set their own password the first time they sign in. When the role is Branch Admin, a branch can be selected and the account optionally designated as that branch's Branch Secretary. Scoped users who try to open another region's or constituency's records see an "Outside your access" message. Accounts can be suspended (blocking login with a message), have their password reset (forcing a new password on next sign in), or be deleted from the Admin page.
+
+## Branch Register
+
+Each branch has its own Branch Register: a list of registered party members at that branch, each assigned an auto-generated registry number (separate from the NDC member ID used for executive records) in the format `MEMBER-<branch>-0001`. The register is opened from the **Branch Register** button on a branch's page, visible to the National Admin, the Constituency Admin for that constituency, and the branch's designated Branch Secretary. Entries record full name, phone, gender, and date of birth, and can be edited or removed at any time.
 
 ## Registration numbers
 

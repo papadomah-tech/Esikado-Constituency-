@@ -313,11 +313,13 @@ function branchToRow(b){ return {id:b.id, name:b.name, ward_id:b.wardId, created
 function rowToBranch(r){ return {id:r.id, name:r.name, wardId:r.ward_id, type:'branch', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function unitToRow(u){ return {id:u.id, name:u.name, branch_id:u.branchId, created_at:u.createdAt||new Date().toISOString(), updated_at:u.updatedAt||new Date().toISOString(), created_by:u.createdBy||null}; }
 function rowToUnit(r){ return {id:r.id, name:r.name, branchId:r.branch_id, type:'unit', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
+function regMemberToRow(m){ return {id:m.id, branch_id:m.branchId, registry_no:m.registryNo, full_name:m.fullName, phone:m.phone||null, gender:m.gender||null, dob:m.dob||null, created_at:m.createdAt||new Date().toISOString(), updated_at:new Date().toISOString(), created_by:m.createdBy||null}; }
+function rowToRegMember(r){ return {id:r.id, branchId:r.branch_id, registryNo:r.registry_no, fullName:r.full_name, phone:r.phone, gender:r.gender, dob:r.dob, createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function userToRow(u){
-  return {id:u.id||u.username, username:u.username, password:u.password, full_name:u.fullName||u.username, role:u.role, scope_constituency_id:u.scopeConstituencyId||null, scope_constituency_name:u.scopeConstituencyName||null, must_change_password:u.mustChangePassword||false, suspended:u.suspended||false, created_by:u.createdBy||null, updated_at:new Date().toISOString()};
+  return {id:u.id||u.username, username:u.username, password:u.password, full_name:u.fullName||u.username, role:u.role, scope_constituency_id:u.scopeConstituencyId||null, scope_constituency_name:u.scopeConstituencyName||null, scope_branch_id:u.scopeBranchId||null, scope_branch_name:u.scopeBranchName||null, is_branch_secretary:u.isBranchSecretary||false, must_change_password:u.mustChangePassword||false, suspended:u.suspended||false, created_by:u.createdBy||null, updated_at:new Date().toISOString()};
 }
 function rowToUser(r){
-  return {id:r.id, username:r.username, password:r.password, fullName:r.full_name, role:r.role, scopeConstituencyId:r.scope_constituency_id, scopeConstituencyName:r.scope_constituency_name, mustChangePassword:r.must_change_password||false, suspended:r.suspended||false, createdBy:r.created_by};
+  return {id:r.id, username:r.username, password:r.password, fullName:r.full_name, role:r.role, scopeConstituencyId:r.scope_constituency_id, scopeConstituencyName:r.scope_constituency_name, scopeBranchId:r.scope_branch_id, scopeBranchName:r.scope_branch_name, isBranchSecretary:r.is_branch_secretary||false, mustChangePassword:r.must_change_password||false, suspended:r.suspended||false, createdBy:r.created_by};
 }
 
 // ---- Store shim — same API as before, backed by Supabase ----
@@ -482,6 +484,12 @@ async function prefixForExec(rec){
   const conId = await constituencyIdOf(rec);
   return conId || 'NAT';
 }
+// Branch Register members get a registry number scoped per branch, in a
+// distinct format (REG-####) from executive registration numbers, so the
+// two cannot be confused when verifying nominations.
+async function nextBranchRegistryNo(branchId){
+  return await nextRegNo('MEMBER-'+branchId);
+}
 // No migration needed — Supabase is the single source of truth from first use.
 async function migrateToNational(){ /* no-op: Supabase schema handles structure */ }
 
@@ -519,6 +527,18 @@ function userConId(){ return isNational()? null : (State.session && State.sessio
 function inScope(conId){ const s=userConId(); return s===null ? true : conId===s; }
 // The constituency context currently in view (national admins can switch; others are fixed).
 function activeConId(){ return isNational()? State.currentCon : userConId(); }
+// Whether the current user is the designated Branch Secretary for a given branch.
+function isBranchSecretaryFor(branchId){
+  const u = State.session;
+  return !!(u && u.role==='branch_admin' && u.isBranchSecretary && u.scopeBranchId===branchId);
+}
+// Whether the current user may view/manage the Branch Register for a given branch:
+// National Admin and Constituency Admin (within their constituency) can always;
+// a Branch Secretary can only for their own designated branch.
+function canManageRegister(branchId){
+  if(isNational() || (State.session && State.session.role==='constituency_admin')) return true;
+  return isBranchSecretaryFor(branchId);
+}
 
 /* ---------------- Data accessors (Supabase-backed) ---------------- */
 const Data = {
@@ -536,6 +556,7 @@ const Data = {
     const r=await SB.select('ndc_audit',qs);
     return (r||[]).map(a=>({id:a.id,ts:a.ts,user:a.username,role:a.role,action:a.action,entityType:a.entity_type,entityId:a.entity_id,detail:a.detail}));
   },
+  branchRegister: async (branchId)=>{ const r=await SB.select('ndc_branch_register','branch_id=eq.'+encodeURIComponent(branchId)+'&order=registry_no.asc'); return (r||[]).map(rowToRegMember); },
   // Legacy single-record lookups used by viewExecProfile and constituencyIdOf
   get: async (k)=>{
     try{
@@ -617,6 +638,7 @@ async function _render(){
     else if(route==='ward'){ c.innerHTML = await viewOrgDetail('ward', parts[1]); }
     else if(route==='branch'){ c.innerHTML = await viewOrgDetail('branch', parts[1]); }
     else if(route==='unit'){ c.innerHTML = await viewOrgDetail('unit', parts[1]); }
+    else if(route==='register'){ c.innerHTML = await viewBranchRegister(parts[1]); wireBranchRegister(parts[1]); }
     else if(route==='exec'){
       if(parts[1]==='new'){ c.innerHTML = await viewExecForm(null,q); wireExecForm(); }
       else if(parts[2]==='edit'){ c.innerHTML = await viewExecForm(parts[1],q); wireExecForm(); }
@@ -984,6 +1006,7 @@ async function viewOrgDetail(level, id){
   return `
   ${crumbs}
   <div class="section-head"><h2>${esc(node.name)}</h2><span class="badge ${level==='ward'?'':level==='branch'?'y':'r'}">${LVS[level]}</span><span class="spacer"></span>
+    ${(level==='branch'&&canManageRegister(id))?`<button class="btn sm" data-link="#/register/${id}">📋 Branch Register</button>`:''}
     ${can('edit')?`<button class="btn sm" data-act="editOrg" data-level="${level}" data-id="${id}">Edit</button>`:''}
     ${can('delete')?`<button class="btn sm danger" data-act="delOrg" data-level="${level}" data-id="${id}">Delete</button>`:''}
   </div>
@@ -1028,6 +1051,100 @@ async function buildCrumb(level,node){
   else if(level==='branch'){ const w=await Data.get('ward:'+node.wardId); parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Zonal/Electoral Area')}</a>`,`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
   else if(level==='unit'){ const b=await Data.get('branch:'+node.branchId); const w=b?await Data.get('ward:'+b.wardId):null; if(w)parts.push(`<span class="sep">›</span><a href="#/ward/${w.id}">${esc(w.name)}</a>`); if(b)parts.push(`<span class="sep">›</span><a href="#/branch/${b.id}">${esc(b.name)}</a>`); parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
   return `<div class="crumb">${parts.join('')}</div>`;
+}
+
+/* ============================================================
+   BRANCH REGISTER
+   Register of all registered party members at branch level,
+   compiled by the Branch Secretary. Each entry gets an
+   auto-generated registry number used to verify identity when
+   filing branch nominations.
+   ============================================================ */
+async function viewBranchRegister(branchId){
+  const branch = await Data.get('branch:'+branchId);
+  if(!branch) return emptyState('🚫','Not found','This branch may have been deleted.');
+  const conId = await constituencyIdOf(branch);
+  if(!inScope(conId)) return denyView();
+  if(!canManageRegister(branchId)) return denyView();
+  const members = await Data.branchRegister(branchId);
+
+  return `
+  <div class="crumb"><a href="#/branch/${branchId}">‹ ${esc(branch.name)}</a></div>
+  <div class="section-head"><h2>Branch Register</h2><span class="sub">${esc(branch.name)}</span><span class="spacer"></span>
+    <button class="btn sm primary" data-act="addMember">＋ Add member</button>
+  </div>
+
+  <div class="card pad">
+    <p class="muted small" style="margin:0 0 10px">Every registered party member at this branch, with an auto-generated registry number. This list is used to verify identity when members file nominations for branch positions.</p>
+    ${members.length? `<div class="list">`+members.map(m=>`
+      <div class="item" data-id="${esc(m.id)}">
+        <div class="av">${initials(m.fullName)}</div>
+        <div class="body"><div class="nm">${esc(m.fullName)} <span class="reg">${esc(m.registryNo)}</span></div><div class="mt">${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))} • ${esc(m.phone||'—')}${m.dob?' • '+fmtDate(m.dob):''}</div></div>
+        <button class="btn sm" data-act="editMember" data-id="${esc(m.id)}">Edit</button>
+        <button class="btn sm danger" data-act="delMember" data-id="${esc(m.id)}">✕</button>
+      </div>`).join('')+`</div>` : `<p class="muted small" style="margin:0">No members registered yet. Use ＋ Add member to begin compiling the register.</p>`}
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:6px">Total registered</h3>
+    <p class="muted small" style="margin:0"><b>${members.length}</b> member(s) on the register for ${esc(branch.name)}.</p>
+  </div>`;
+}
+function wireBranchRegister(branchId){
+  const memberForm = (existing)=>`
+    <div class="field"><label>Full name <span class="req">*</span></label><input id="mFullName" value="${existing?esc(existing.fullName):''}"></div>
+    <div class="field"><label>Phone</label><input id="mPhone" value="${existing?esc(existing.phone||''):''}"></div>
+    <div class="field"><label>Gender</label><select id="mGender">
+      <option value="">Select…</option>
+      <option value="male" ${existing&&existing.gender==='male'?'selected':''}>Male</option>
+      <option value="female" ${existing&&existing.gender==='female'?'selected':''}>Female</option>
+    </select></div>
+    <div class="field"><label>Date of birth</label><input id="mDob" type="date" value="${existing?esc(existing.dob||''):''}"></div>
+    ${existing?`<p class="muted small" style="margin:0 0 8px">Registry number: <b>${esc(existing.registryNo)}</b> (assigned, cannot be changed)</p>`:'<p class="muted small" style="margin:0 0 8px">A registry number will be assigned automatically on save.</p>'}`;
+
+  $('[data-act=addMember]').onclick=async()=>{
+    const r=await modalForm('Add member', memberForm(null));
+    if(!r.ok) return;
+    const fullName=$('#mFullName').value.trim();
+    if(!fullName){ toast('Full name is required',true); return; }
+    const rec={
+      id:uid(), branchId, fullName,
+      phone:$('#mPhone').value.trim(), gender:$('#mGender').value, dob:$('#mDob').value,
+      createdBy:State.session.username,
+    };
+    rec.registryNo = await nextBranchRegistryNo(branchId);
+    r.el.remove();
+    await SB.upsert('ndc_branch_register', regMemberToRow(rec));
+    await audit('CREATE','branch_register',rec.id,'Added '+fullName+' to branch register ['+rec.registryNo+']');
+    toast('Member added — '+rec.registryNo); render();
+  };
+
+  document.querySelectorAll('[data-act=editMember]').forEach(b=>b.onclick=async()=>{
+    const members = await Data.branchRegister(branchId);
+    const existing = members.find(m=>m.id===b.dataset.id);
+    if(!existing) return;
+    const r=await modalForm('Edit member', memberForm(existing));
+    if(!r.ok) return;
+    const fullName=$('#mFullName').value.trim();
+    if(!fullName){ toast('Full name is required',true); return; }
+    const rec=Object.assign({}, existing, {
+      fullName, phone:$('#mPhone').value.trim(), gender:$('#mGender').value, dob:$('#mDob').value,
+    });
+    r.el.remove();
+    await SB.upsert('ndc_branch_register', regMemberToRow(rec));
+    await audit('UPDATE','branch_register',rec.id,'Updated '+fullName+' ['+rec.registryNo+']');
+    toast('Saved'); render();
+  });
+
+  document.querySelectorAll('[data-act=delMember]').forEach(b=>b.onclick=async()=>{
+    const members = await Data.branchRegister(branchId);
+    const existing = members.find(m=>m.id===b.dataset.id);
+    const go=await confirmModal('Remove member?', 'This removes '+(existing?existing.fullName:'this member')+' from the branch register. This cannot be undone.');
+    if(!go) return;
+    await SB.delete('ndc_branch_register','id=eq.'+encodeURIComponent(b.dataset.id));
+    await audit('DELETE','branch_register',b.dataset.id,'Removed '+(existing?existing.fullName+' ['+existing.registryNo+']':'member')+' from branch register');
+    toast('Removed'); render();
+  });
 }
 
 /* ============================================================
@@ -1685,7 +1802,7 @@ async function viewAdmin(){
     <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span><button class="btn sm primary" data-act="newUser">＋ User</button></div>
     ${users.length? `<div class="list">`+users.map(u=>`
       <div class="item"><div class="av">${initials(u.fullName||u.username)}</div>
-        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${roleBadge(u.role)}">${esc(roleLabel(u.role))}</span>${u.suspended?' <span class="badge r">suspended</span>':''}</div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}</div></div>
+        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${roleBadge(u.role)}">${esc(roleLabel(u.role))}</span>${u.isBranchSecretary?' <span class="badge y">Branch Secretary</span>':''}${u.suspended?' <span class="badge r">suspended</span>':''}</div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}${u.isBranchSecretary&&u.scopeBranchName?' • '+esc(u.scopeBranchName):''}</div></div>
         ${canManage(u)?`
         <div class="row" style="gap:6px;flex:0 0 auto">
           <button class="btn sm" data-act="toggleSuspend" data-id="${esc(u.username)}" data-suspended="${u.suspended?'1':'0'}" title="${u.suspended?'Unsuspend':'Suspend'}">${u.suspended?'▶':'⏸'}</button>
@@ -1802,26 +1919,74 @@ async function newUserFlow(){
       <option value="branch_admin">Branch Admin</option>
       <option value="viewer">Viewer</option>`;
   }
+  // Build a branch picker grouped by zonal/electoral area, for every constituency
+  // (filtered client-side to the selected constituency when role is Branch Admin).
+  const branchGroupsByCon = {};
+  g.cons.forEach(c=>{
+    const wardsInCon = g.wards.filter(w=>w.constituencyId===c.id).sort((a,b)=>a.name.localeCompare(b.name));
+    branchGroupsByCon[c.id] = wardsInCon.map(w=>({
+      label:w.name,
+      opts:g.branches.filter(b=>b.wardId===w.id).sort((a,b)=>a.name.localeCompare(b.name)).map(b=>({v:b.id,t:b.name}))
+    })).filter(grp=>grp.opts.length);
+  });
+  const branchFieldFor = (conId)=>{
+    const groups = branchGroupsByCon[conId]||[];
+    const opts = groups.length
+      ? groups.map(grp=>`<optgroup label="${esc(grp.label)}">${grp.opts.map(o=>`<option value="${esc(o.v)}">${esc(o.t)}</option>`).join('')}</optgroup>`).join('')
+      : '';
+    return `<option value="">Select…</option>${opts}`;
+  };
+  const branchField = `
+    <div class="field branch-only" id="nuBranchField" style="display:none">
+      <label>Branch</label><select id="nuBranch">${national?'<option value="">Select a constituency first…</option>':branchFieldFor(ownCon)}</select>
+    </div>
+    <div class="field branch-only" id="nuSecretaryField" style="display:none">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="checkbox" id="nuSecretary" style="width:auto"> Also make this user the Branch Secretary</label>
+      <p class="muted small" style="margin:4px 0 0">The Branch Secretary compiles the Branch Register (party members) for the selected branch.</p>
+    </div>`;
   const body=`
     <div class="field"><label>Full name</label><input id="nuName"></div>
     <div class="field"><label>Username</label><input id="nuUser"></div>
     <div class="field"><label>Temporary password</label><input id="nuPw" type="password"></div>
     <p class="muted small" style="margin:-4px 0 8px">The new user will be required to set their own password the first time they sign in.</p>
     <div class="field"><label>Role</label><select id="nuRole">${roleOptions}</select></div>
-    ${conField}`;
-  const r=await modalForm('Add user',body);
+    ${conField}
+    ${branchField}`;
+  const r=await modalForm('Add user',body,(bg)=>{
+    const roleSel=bg.querySelector('#nuRole'), conSel=bg.querySelector('#nuCon'), branchSel=bg.querySelector('#nuBranch');
+    const branchFields=bg.querySelectorAll('.branch-only');
+    const refresh=()=>{
+      const showBranch = roleSel.value==='branch_admin';
+      branchFields.forEach(f=>f.style.display = showBranch?'':'none');
+      if(showBranch && national && branchSel){
+        const conId=conSel.value;
+        branchSel.innerHTML = conId? branchFieldFor(conId) : '<option value="">Select a constituency first…</option>';
+      }
+    };
+    roleSel.addEventListener('change',refresh);
+    if(conSel) conSel.addEventListener('change',refresh);
+    refresh();
+  });
   if(!r.ok) return;
   const name=$('#nuName').value.trim(), username=$('#nuUser').value.trim().toLowerCase(), pw=$('#nuPw').value, role=$('#nuRole').value, conId=$('#nuCon').value;
   if(!username||!pw){ toast('Username and password are required',true); return; }
   const existCheck=await SB.select('ndc_users','username=eq.'+encodeURIComponent(username)+'&limit=1'); if(existCheck&&existCheck.length){ toast('That username is taken',true); return; }
   if(role!=='national_admin' && !conId){ toast('Select a constituency for this user',true); return; }
   if(!national && conId!==ownCon){ toast('You can only create accounts for your own constituency',true); return; }
+  let branchId='', isSecretary=false;
+  if(role==='branch_admin'){
+    branchId = $('#nuBranch') ? $('#nuBranch').value : '';
+    isSecretary = $('#nuSecretary') ? $('#nuSecretary').checked : false;
+    if(isSecretary && !branchId){ toast('Select a branch to assign as Branch Secretary',true); return; }
+  }
   r.el.remove();
   const con = conId? await Data.get('con:'+conId) : null;
+  const branch = branchId? await Data.get('branch:'+branchId) : null;
   const rec={id:username,username,password:pw,fullName:name||username,role,mustChangePassword:true,createdBy:State.session.username};
   if(role!=='national_admin'){ rec.scopeConstituencyId=conId; rec.scopeConstituencyName=con?con.name:conId; }
+  if(role==='branch_admin' && isSecretary && branch){ rec.scopeBranchId=branch.id; rec.scopeBranchName=branch.name; rec.isBranchSecretary=true; }
   await SB.upsert('ndc_users', userToRow(rec));
-  await audit('CREATE','user',username,'Added user @'+username+' ('+role+(con?', '+con.name:'')+')');
+  await audit('CREATE','user',username,'Added user @'+username+' ('+role+(con?', '+con.name:'')+(rec.isBranchSecretary?', Branch Secretary for '+branch.name:'')+')');
   toast('User added'); render();
 }
 
@@ -1852,12 +2017,13 @@ function confirmModal(title,msg){
     bg.addEventListener('click',e=>{ if(e.target===bg){ bg.remove(); res(false);} const x=e.target.dataset.x; if(x!==undefined){ bg.remove(); res(x==='1'); } });
   });
 }
-function modalForm(title,bodyHtml){
+function modalForm(title,bodyHtml,onMount){
   return new Promise(res=>{
     const bg=document.createElement('div'); bg.className='modal-bg';
     bg.innerHTML=`<div class="modal"><h3>${esc(title)}</h3>${bodyHtml}<div class="acts"><button class="btn" data-x="0">Cancel</button><button class="btn primary" data-x="1">Save</button></div></div>`;
     document.body.appendChild(bg);
     bg._resolve=res; bg._cleanup=()=>bg.remove();
+    if(typeof onMount==='function') onMount(bg);
     bg.addEventListener('click',e=>{ const x=e.target.dataset.x; if(e.target===bg){bg.remove();res({ok:false});} else if(x!==undefined){ if(x==='0'){bg.remove();res({ok:false});} else { res({ok:true,el:bg}); } } });
   });
 }
