@@ -14,11 +14,11 @@ A working, offline-first Progressive Web App for registering and managing party 
 
 ## Organisational structure
 
-The registry has five levels:
+The registry has four levels:
 
-**Region (16) -> Constituency (276) -> Ward / Electoral Area -> Branch -> Unit / Polling Station**
+**Region (16) -> Constituency (276) -> Zonal/Electoral Area -> Branch**
 
-All 16 regions and 276 constituencies of Ghana are seeded automatically and cannot be added or removed from within the app. Each region and each constituency can have its own executives (Chairman, Vice Chairmen, Secretary, Treasurer, Organizers, Women's and Youth Organizers, Communications Officer, Nasara Coordinator, and deputies where applicable), in addition to the Ward, Branch and Unit executives below them.
+All 16 regions and 276 constituencies of Ghana are seeded automatically and cannot be added or removed from within the app. Each region and each constituency can have its own executives (Chairman, Vice Chairmen, Secretary, Treasurer, Organizers, Women's and Youth Organizers, Communications Officer, Nasara Coordinator, and deputies where applicable). Each Zonal/Electoral Area has a single elected Zonal Coordinator. Each Branch has its own nine-position executive slate (Chairman, Secretary, Organizer, Youth Organizer, Women's Organizer, Communications Officer, Treasurer, Executive Member 1, Executive Member 2) and is the lowest level in the structure.
 
 ## First sign in
 
@@ -27,26 +27,20 @@ Open the app and log in with:
 - **Username:** `admin`
 - **Password:** `ndc2024`
 
-This is the **National Administrator** account. On first login (and on any device where this account is still on the published default password), you will be required to set a new password immediately, before the rest of the app becomes available. The default password stops working on that device the moment a new one is set.
+This is the **National Administrator** account. On first login, you will be required to set a new password immediately, before the rest of the app becomes available. This account, and every account, is stored centrally, so once the password is changed it applies on every device immediately and the default stops working everywhere.
 
-To change your password again later, go to **Admin** and use **Reset my password**, which requires your current password plus a confirmation of the new one.
-
-### Important: this is a per-device security boundary
-
-Because this app stores its data locally on each device (see "How data is stored" below), the `admin` / `ndc2024` default is only ever a one-time setup credential **for the device it is used on**. Changing the password on one phone or computer does not change it on any other device: each device that has never had this account log in will still offer `admin` / `ndc2024` as the starting credential, and will immediately force a new password to be set on first use there too.
-
-If staff were given the shared `admin` / `ndc2024` credential during rollout, treat every device that login was used on as needing its own password change (or, better, create individually named accounts from **Admin, + User** and stop using the shared `admin` account for day-to-day access).
+To change your own password later, use the account icon (👤) in the top bar.
 
 ## Roles and access
 
 | Role | Access |
 |---|---|
-| **National Admin** | Sees and manages the whole country: all 16 regions, all 276 constituencies, region-level executives, user accounts. |
-| **Constituency Admin** | Scoped to one constituency: its executives, wards, branches, units, search, reports, and album. |
-| **Ward Admin / Branch Admin** | Standard create/edit access within their constituency's scope. |
+| **National Admin** | Sees and manages the whole country: all 16 regions, all 276 constituencies, region-level executives, and user accounts (suspend, reset, or delete any account). |
+| **Constituency Admin** | Scoped to one constituency: its executives, zonal/electoral areas, branches, search, reports, and album. Can also create and manage user accounts (any non-national role, including other Constituency Admins) for that constituency. |
+| **Zonal/Electoral Area Admin / Branch Admin** | Standard create/edit access within their constituency's scope. |
 | **Viewer** | Read-only access and exports within their scope. |
 
-A National Admin creates new accounts from **Admin, + User**, choosing a role and, for everything except National Admin, the constituency the account is scoped to (the constituency list is grouped by region to make this easier with 276 options). Scoped users who try to open another region's or constituency's records see an "Outside your access" message.
+A National Admin or Constituency Admin creates new accounts from **Admin, + User**, choosing a role and a temporary password; the new user must set their own password the first time they sign in. Scoped users who try to open another region's or constituency's records see an "Outside your access" message. Accounts can be suspended (blocking login with a message), have their password reset (forcing a new password on next sign in), or be deleted from the Admin page.
 
 ## Registration numbers
 
@@ -70,14 +64,14 @@ Region codes and constituency codes are also kept distinct from each other natio
 
 ## Features
 
-- Five-level registry (Region, Constituency, Ward, Branch, Unit) with drill-down and breadcrumb navigation, scoped to the signed-in user's access. National Admins start at a list of 16 regions, drill into a region to see its constituencies and region executives, then into a constituency for its wards.
+- Four-level registry (Region, Constituency, Zonal/Electoral Area, Branch) with drill-down and breadcrumb navigation, scoped to the signed-in user's access. National Admins start at a list of 16 regions, drill into a region to see its constituencies and region executives, then into a constituency for its zonal/electoral areas and branches.
 - National dashboard with a per-region roll-up of executive counts (16 rows); constituency dashboard for scoped users.
 - Executive records with mandatory passport photo (camera or gallery) and mandatory NDC member ID number, auto-compressed photo before saving.
 - Full validation, phone-based and name plus date-of-birth duplicate detection.
 - Search across all levels with region and constituency filters (grouped by region), level, gender, and sort filters, including search by registration number or NDC member ID.
-- Reports: gender distribution across all five levels, coverage gaps, totals (regions, constituencies, wards, branches, units), CSV export, scoped to the user's access.
+- Reports: gender distribution across all levels, coverage gaps, totals (regions, constituencies, zonal/electoral areas, branches), CSV export, scoped to the user's access.
 - Photo album report: passport photos in a grid, grouped by region for region-level executives and by constituency (with region shown) elsewhere in the national view, or by location in a scoped view, filterable by region and constituency, with a print or save-as-PDF layout for A4.
-- Data tools: CSV export and import with `region`, `constituency`, and `memberId` columns (regions and constituencies matched by name or code, with the region column used to disambiguate duplicate constituency names; wards, branches, and units matched by name and created if missing, with the correct registration prefix assigned automatically), full backup and restore as a single JSON file.
+- Data tools: CSV export and import with `region`, `constituency`, and `memberId` columns (regions and constituencies matched by name or code, with the region column used to disambiguate duplicate constituency names; zonal/electoral areas and branches matched by name and created if missing, with the correct registration prefix assigned automatically), full backup and restore as a single JSON file.
 - Audit trail of every create, update, delete, import, export, and login. The National Admin sees activity from every user; all other users see only their own activity, both on the dashboard and the Activity tab.
 - Installable and fully usable offline.
 
@@ -143,4 +137,4 @@ This is already done as of v4.0: the app reads and writes Supabase directly via 
 
 ## Note on the architecture
 
-This is version 4.0 of the system, extended from a single-region registry (Western Region, 17 constituencies, device-local storage) to a national registry covering all 16 regions and 276 constituencies of Ghana, with national-level and constituency-level access (no separate regional-admin tier), backed by a shared Supabase database for real-time multi-device sync. The 16 regions and 276 constituencies remain fixed constants in the app code, since they never change; everything else (users, executives, wards, branches, units, registration sequences, audit log) lives in Supabase.
+This is version 5.0 of the system. It builds on the v4.0 national rebuild (all 16 regions and 276 constituencies of Ghana, backed by a shared Supabase database for real-time multi-device sync) and restructures the lower levels of the hierarchy: the former Ward level is renamed Zonal/Electoral Area with a single elected Zonal Coordinator position, the Unit/Polling Station level is retired (existing unit-level records remain in the database for historical integrity but are hidden from all views), and Branches now use a fixed nine-position executive slate (Chairman, Secretary, Organizer, Youth Organizer, Women's Organizer, Communications Officer, Treasurer, Executive Member 1, Executive Member 2) and are the lowest level in the structure. The 16 regions and 276 constituencies remain fixed constants in the app code, since they never change; everything else (users, executives, zonal/electoral areas, branches, registration sequences, audit log) lives in Supabase.

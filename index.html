@@ -340,8 +340,10 @@ const initials = (n)=> (n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join
 const fmtDate = (iso)=>{ if(!iso) return '—'; const d=new Date(iso); return isNaN(d)? '—' : d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); };
 const age = (dob)=>{ if(!dob) return null; const d=new Date(dob); if(isNaN(d)) return null; const t=new Date(); let a=t.getFullYear()-d.getFullYear(); const m=t.getMonth()-d.getMonth(); if(m<0||(m===0&&t.getDate()<d.getDate())) a--; return a; };
 function toast(msg,err){ const t=$('#toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); clearTimeout(t._t); t._t=setTimeout(()=>t.className='toast',2600); }
-const LV = {region:'Region', constituency:'Constituency', ward:'Ward / Electoral Area', branch:'Branch', unit:'Unit / Polling Station'};
-const LVS = {region:'Region', constituency:'Constituency', ward:'Ward', branch:'Branch', unit:'Unit'};
+const LV = {region:'Region', constituency:'Constituency', ward:'Zonal/Electoral Area', branch:'Branch', unit:'Unit / Polling Station'};
+const ROLE_LABELS = {national_admin:'National Admin', constituency_admin:'Constituency Admin', ward_admin:'Zonal/Electoral Area Admin', branch_admin:'Branch Admin', viewer:'Viewer'};
+function roleLabel(role){ return ROLE_LABELS[role] || (role||'').replace(/_/g,' '); }
+const LVS = {region:'Region', constituency:'Constituency', ward:'Zonal/Electoral Area', branch:'Branch', unit:'Unit'};
 
 /* ---------------- Audit ---------------- */
 async function audit(action, entityType, entityId, detail){
@@ -352,24 +354,33 @@ async function audit(action, entityType, entityId, detail){
 
 /* ---------------- Default positions slate ---------------- */
 const DEFAULT_POSITIONS = [
-  {title:'Chairman', levels:['region','constituency','ward','branch']},
+  {title:'Chairman', levels:['region','constituency','ward']},
   {title:'First Vice Chairman', levels:['region','constituency']},
   {title:'Second Vice Chairman', levels:['region','constituency']},
-  {title:'Vice Chairman', levels:['ward','branch']},
-  {title:'Secretary', levels:['region','constituency','ward','branch','unit']},
-  {title:'Deputy Secretary', levels:['region','constituency','ward','branch']},
-  {title:'Treasurer', levels:['region','constituency','ward','branch']},
+  {title:'Vice Chairman', levels:['ward']},
+  {title:'Secretary', levels:['region','constituency','ward']},
+  {title:'Deputy Secretary', levels:['region','constituency','ward']},
+  {title:'Treasurer', levels:['region','constituency','ward']},
   {title:'Deputy Treasurer', levels:['region','constituency']},
-  {title:'Organizer', levels:['region','constituency','ward','branch','unit']},
-  {title:'Deputy Organizer', levels:['region','constituency','ward','branch']},
-  {title:"Women's Organizer", levels:['region','constituency','ward','branch','unit']},
+  {title:'Organizer', levels:['region','constituency','ward']},
+  {title:'Deputy Organizer', levels:['region','constituency','ward']},
+  {title:"Women's Organizer", levels:['region','constituency','ward']},
   {title:"Deputy Women's Organizer", levels:['region','constituency']},
-  {title:'Youth Organizer', levels:['region','constituency','ward','branch','unit']},
+  {title:'Youth Organizer', levels:['region','constituency','ward']},
   {title:'Deputy Youth Organizer', levels:['region','constituency']},
-  {title:'Communications Officer', levels:['region','constituency','ward','branch']},
-  {title:'Nasara Coordinator', levels:['region','constituency','ward','branch']},
-  {title:'Electoral Area Coordinator', levels:['ward']},
-  {title:'Polling Station Executive', levels:['unit']},
+  {title:'Communications Officer', levels:['region','constituency','ward']},
+  {title:'Nasara Coordinator', levels:['region','constituency','ward']},
+  {title:'Zonal Coordinator', levels:['ward']},
+  // Branch-level executive positions
+  {title:'Chairman', levels:['branch']},
+  {title:'Secretary', levels:['branch']},
+  {title:'Organizer', levels:['branch']},
+  {title:'Youth Organizer', levels:['branch']},
+  {title:"Women's Organizer", levels:['branch']},
+  {title:'Communications Officer', levels:['branch']},
+  {title:'Treasurer', levels:['branch']},
+  {title:'Executive Member 1', levels:['branch']},
+  {title:'Executive Member 2', levels:['branch']},
 ];
 
 /* ---------------- Regions & constituencies (Ghana, fixed national structure) ---------------- */
@@ -743,7 +754,6 @@ async function viewDashboard(){
   const execs = g.execs.filter(inSet);
   const wards = scoped? g.wards.filter(w=>w.constituencyId===scoped) : g.wards;
   const branches = scoped? g.branches.filter(b=>(g.wMap[b.wardId]||{}).constituencyId===scoped) : g.branches;
-  const units = scoped? g.units.filter(u=>{const b=g.bMap[u.branchId];return b&&(g.wMap[b.wardId]||{}).constituencyId===scoped;}) : g.units;
 
   const gd = {male:0,female:0}; execs.forEach(e=>{ gd[e.gender]=(gd[e.gender]||0)+1; });
   const tot = execs.length||1;
@@ -776,9 +786,9 @@ async function viewDashboard(){
   <div class="section-head"><h2>${esc(heading)}</h2><span class="spacer"></span><span class="badge k">${esc(State.session.fullName||State.session.username)}</span></div>
   <div class="grid-stat">
     <div class="stat g"><div class="n">${execs.length}</div><div class="l">Executives</div></div>
-    <div class="stat k"><div class="n">${scoped?wards.length:g.regions.length}</div><div class="l">${scoped?'Wards':'Regions'}</div></div>
+    <div class="stat k"><div class="n">${scoped?wards.length:g.regions.length}</div><div class="l">${scoped?'Zonal Areas':'Regions'}</div></div>
     <div class="stat y"><div class="n">${scoped?branches.length:g.cons.length}</div><div class="l">${scoped?'Branches':'Constituencies'}</div></div>
-    <div class="stat r"><div class="n">${scoped?units.length:wards.length}</div><div class="l">${scoped?'Units':'Wards'}</div></div>
+    <div class="stat r"><div class="n">${scoped?new Set(execs.filter(e=>e.level==='branch').map(e=>e.branchId)).size:wards.length}</div><div class="l">${scoped?'Branches with execs':'Zonal Areas'}</div></div>
   </div>
 
   <div class="card pad" style="margin-top:14px">
@@ -790,9 +800,8 @@ async function viewDashboard(){
 
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:12px">Coverage</h3>
-    ${covRow('Wards with executives', new Set(execs.filter(e=>e.level==='ward').map(e=>e.wardId)).size, wards.length)}
+    ${covRow('Zonal Areas with coordinator', new Set(execs.filter(e=>e.level==='ward'&&e.position==='Zonal Coordinator').map(e=>e.wardId)).size, wards.length)}
     ${covRow('Branches with executives', new Set(execs.filter(e=>e.level==='branch').map(e=>e.branchId)).size, branches.length)}
-    ${covRow('Units with executives', new Set(execs.filter(e=>e.level==='unit').map(e=>e.unitId)).size, units.length)}
   </div>
 
   <div class="card pad" style="margin-top:14px">
@@ -815,7 +824,11 @@ function covRow(label, n, total){
    ============================================================ */
 // Load the whole org graph once with quick lookup maps + a constituency resolver.
 async function loadGraph(){
-  const [regions,cons,wards,branches,units,execs]=await Promise.all([Data.regions(),Data.constituencies(),Data.wards(),Data.branches(),Data.units(),Data.execs()]);
+  const [regions,cons,wards,branches,units,execsAll]=await Promise.all([Data.regions(),Data.constituencies(),Data.wards(),Data.branches(),Data.units(),Data.execs()]);
+  // The Unit level has been retired from the active structure (v5.0). Any
+  // pre-existing unit-level executive records remain in the database for
+  // historical integrity but are excluded from all views going forward.
+  const execs = execsAll.filter(e=>e.level!=='unit');
   const rMap={},cMap={},wMap={},bMap={},uMap={};
   regions.forEach(r=>rMap[r.id]=r);
   cons.forEach(c=>cMap[c.id]=c); wards.forEach(w=>wMap[w.id]=w); branches.forEach(b=>bMap[b.id]=b); units.forEach(u=>uMap[u.id]=u);
@@ -915,15 +928,15 @@ async function viewConstituencyDetail(id){
   </div>
 
   <div class="card pad" style="margin-top:14px">
-    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Wards / Electoral areas</h3><span class="badge k">${wards.length}</span><span class="spacer"></span>
-      ${can('create')?`<button class="btn sm" data-act="newWardIn" data-con="${id}">＋ Ward</button>`:''}
+    <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Zonal/Electoral Areas</h3><span class="badge k">${wards.length}</span><span class="spacer"></span>
+      ${can('create')?`<button class="btn sm" data-act="newWardIn" data-con="${id}">＋ Zonal/Electoral Area</button>`:''}
     </div>
     ${wards.length? `<div class="list">`+wards.map(w=>`
       <div class="item org" data-link="#/ward/${w.id}">
         <div class="icoo w">🏛️</div>
-        <div class="body"><div class="nm">${esc(w.name)}</div><div class="mt">${wardBranch(w.id)} branch(es) • ${wardExec(w.id)} ward exec(s)${w.code?' • '+esc(w.code):''}</div></div>
+        <div class="body"><div class="nm">${esc(w.name)}</div><div class="mt">${wardBranch(w.id)} branch(es) • ${wardExec(w.id)} exec(s)${w.code?' • '+esc(w.code):''}</div></div>
         <div class="chev">›</div>
-      </div>`).join('')+`</div>` : `<p class="muted small">No wards yet. Add a Ward / Electoral Area to begin.</p>`}
+      </div>`).join('')+`</div>` : `<p class="muted small">No zonal/electoral areas yet. Add one to begin.</p>`}
   </div>`;
 }
 
@@ -962,7 +975,7 @@ async function viewOrgDetail(level, id){
   const filled = new Set(ownExecs.map(e=>e.position));
   let children=[], childLevel=null, childLabel='';
   if(level==='ward'){ childLevel='branch'; childLabel='Branches'; children=(await Data.branches()).filter(b=>b.wardId===id); }
-  else if(level==='branch'){ childLevel='unit'; childLabel='Units / Polling stations'; children=(await Data.units()).filter(u=>u.branchId===id); }
+  // Branches are leaf nodes in the new structure (no Unit level below).
 
   const crumbs = await buildCrumb(level,node);
   const execCounts = {};
@@ -1012,7 +1025,7 @@ async function buildCrumb(level,node){
   const conId = await constituencyIdOf(node);
   if(conId){ const c=await Data.get('con:'+conId); parts.push(`<span class="sep">›</span><a href="#/constituency/${conId}">${esc(c?c.name:conId)}</a>`); }
   if(level==='ward'){ parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
-  else if(level==='branch'){ const w=await Data.get('ward:'+node.wardId); parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Ward')}</a>`,`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
+  else if(level==='branch'){ const w=await Data.get('ward:'+node.wardId); parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Zonal/Electoral Area')}</a>`,`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
   else if(level==='unit'){ const b=await Data.get('branch:'+node.branchId); const w=b?await Data.get('ward:'+b.wardId):null; if(w)parts.push(`<span class="sep">›</span><a href="#/ward/${w.id}">${esc(w.name)}</a>`); if(b)parts.push(`<span class="sep">›</span><a href="#/branch/${b.id}">${esc(b.name)}</a>`); parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
   return `<div class="crumb">${parts.join('')}</div>`;
 }
@@ -1048,8 +1061,8 @@ async function viewExecForm(execId, q){
       return { label:r.name, opts: wards.filter(w=>consInR.includes(w.constituencyId)).sort((a,b)=>a.name.localeCompare(b.name)).map(w=>({v:w.id,t:w.name+' — '+((g.cMap[w.constituencyId]||{}).code||'')})) };
     }).filter(grp=>grp.opts.length);
     parentField = isNational()
-      ? groupedSelectField('wardId','Ward / Electoral Area',groups,parentId,true)
-      : selectField('wardId','Ward / Electoral Area',wards.sort((a,b)=>a.name.localeCompare(b.name)).map(w=>({v:w.id,t:w.name})),parentId,true);
+      ? groupedSelectField('wardId','Zonal/Electoral Area',groups,parentId,true)
+      : selectField('wardId','Zonal/Electoral Area',wards.sort((a,b)=>a.name.localeCompare(b.name)).map(w=>({v:w.id,t:w.name})),parentId,true);
   } else if(level==='branch'){
     const branches = g.branches.filter(b=>inScope(g.conOf({level:'branch',branchId:b.id}))).sort((a,b)=>a.name.localeCompare(b.name));
     parentField = selectField('branchId','Branch',branches.map(b=>({v:b.id,t:b.name})),parentId,true);
@@ -1225,7 +1238,7 @@ async function viewSearch(q){
     let loc='';
     if(e.level==='region') loc=(reg?reg.name:'')+' (Region)';
     else if(e.level==='constituency') loc=(con?con.name:'')+' (Constituency)';
-    else if(e.level==='ward') loc=((g.wMap[e.wardId]||{}).name||'')+' (Ward)';
+    else if(e.level==='ward') loc=((g.wMap[e.wardId]||{}).name||'')+' (Zonal/Electoral Area)';
     else if(e.level==='branch') loc=((g.bMap[e.branchId]||{}).name||'')+' (Branch)';
     else loc=((g.uMap[e.unitId]||{}).name||'')+' (Unit)';
     return Object.assign({}, e, {_con:con?con.name:'', _conId:cid, _regionId:rid, _region:reg?reg.name:'', _loc:loc});
@@ -1244,7 +1257,7 @@ async function viewSearch(q){
   <div class="filters">
     ${regFilter}
     ${conFilter}
-    <select id="flevel"><option value="">All levels</option><option value="region">Region</option><option value="constituency">Constituency</option><option value="ward">Ward</option><option value="branch">Branch</option><option value="unit">Unit</option></select>
+    <select id="flevel"><option value="">All levels</option><option value="region">Region</option><option value="constituency">Constituency</option><option value="ward">Zonal/Electoral Area</option><option value="branch">Branch</option></select>
     <select id="fgender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
     <select id="fsort"><option value="reg">Sort: Reg. number</option><option value="name">Sort: Name</option><option value="position">Sort: Position</option><option value="recent">Sort: Recent</option></select>
   </div>
@@ -1299,10 +1312,9 @@ async function viewReports(){
   const execs = g.execs.filter(inSet);
   const wards = scoped? g.wards.filter(w=>w.constituencyId===scoped) : g.wards;
   const branches = scoped? g.branches.filter(b=>(g.wMap[b.wardId]||{}).constituencyId===scoped) : g.branches;
-  const units = scoped? g.units.filter(u=>{const b=g.bMap[u.branchId];return b&&(g.wMap[b.wardId]||{}).constituencyId===scoped;}) : g.units;
   const byLevel = l=>execs.filter(e=>e.level===l);
   const genderOf = arr=>{const gg={male:0,female:0};arr.forEach(e=>gg[e.gender]=(gg[e.gender]||0)+1);return gg;};
-  const levels = scoped? ['constituency','ward','branch','unit'] : ['region','constituency','ward','branch','unit'];
+  const levels = scoped? ['constituency','ward','branch'] : ['region','constituency','ward','branch'];
   const lvRow = (l)=>{ const arr=byLevel(l); const gg=genderOf(arr); const t=arr.length||1;
     return `<div class="row small" style="padding:8px 0;border-bottom:1px solid var(--line)">
       <span style="font-weight:700;width:88px">${LVS[l]}</span>
@@ -1310,7 +1322,6 @@ async function viewReports(){
       <span class="muted tiny" style="width:96px;text-align:right">M ${gg.male} • F ${gg.female}</span>
     </div>`; };
 
-  const unitNoExec = units.filter(u=>!execs.some(e=>e.level==='unit'&&e.unitId===u.id));
   const branchNoExec = branches.filter(b=>!execs.some(e=>e.level==='branch'&&e.branchId===b.id));
   const scopeLabel = scoped? ((g.cMap[scoped]||{}).name||'') : NATION_NAME;
 
@@ -1326,9 +1337,7 @@ async function viewReports(){
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:10px">Coverage gaps</h3>
     <div class="row small" style="margin-bottom:8px"><span class="badge ${branchNoExec.length?'r':''}">${branchNoExec.length}</span><span>branch(es) with no executives</span></div>
-    ${branchNoExec.length?`<div class="muted tiny" style="margin-bottom:12px">${branchNoExec.slice(0,12).map(b=>esc(b.name)).join(', ')}${branchNoExec.length>12?'…':''}</div>`:''}
-    <div class="row small" style="margin-bottom:8px"><span class="badge ${unitNoExec.length?'r':''}">${unitNoExec.length}</span><span>unit(s) with no executives</span></div>
-    ${unitNoExec.length?`<div class="muted tiny">${unitNoExec.slice(0,12).map(u=>esc(u.name)).join(', ')}${unitNoExec.length>12?'…':''}</div>`:''}
+    ${branchNoExec.length?`<div class="muted tiny">${branchNoExec.slice(0,12).map(b=>esc(b.name)).join(', ')}${branchNoExec.length>12?'…':''}</div>`:''}
   </div>
 
   <div class="card pad" style="margin-top:14px">
@@ -1337,10 +1346,9 @@ async function viewReports(){
       <dt>Total executives</dt><dd>${execs.length}</dd>
       ${!scoped?`<dt>Region level</dt><dd>${byLevel('region').length}</dd>`:''}
       <dt>Constituency level</dt><dd>${byLevel('constituency').length}</dd>
-      <dt>Ward level</dt><dd>${byLevel('ward').length}</dd>
+      <dt>${LVS.ward} level</dt><dd>${byLevel('ward').length}</dd>
       <dt>Branch level</dt><dd>${byLevel('branch').length}</dd>
-      <dt>Unit level</dt><dd>${byLevel('unit').length}</dd>
-      <dt>${scoped?'Wards / Branches / Units':'Regions / Constituencies / Wards / Branches / Units'}</dt><dd>${scoped?'':(g.regions.length+' / '+g.cons.length+' / ')}${wards.length} / ${branches.length} / ${units.length}</dd>
+      <dt>${scoped?'Zonal Areas / Branches':'Regions / Constituencies / Zonal Areas / Branches'}</dt><dd>${scoped?'':(g.regions.length+' / '+g.cons.length+' / ')}${wards.length} / ${branches.length}</dd>
     </div>
   </div>
 
@@ -1366,7 +1374,7 @@ async function viewAlbum(q){
     else if(e.level==='constituency'){ groupKey='con:'+cid; groupName=con?con.name+' ('+(reg?reg.code:con.regionId)+')':'—'; loc=(con?con.name:'')+' (Constituency)'; }
     else {
       groupKey='con:'+cid; groupName=con?con.name+' ('+(reg?reg.code:con.regionId)+')':'Unassigned';
-      if(e.level==='ward'){ const w=g.wMap[e.wardId]; loc=(w?w.name:'')+' (Ward)'; }
+      if(e.level==='ward'){ const w=g.wMap[e.wardId]; loc=(w?w.name:'')+' (Zonal/Electoral Area)'; }
       else if(e.level==='branch'){ const b=g.bMap[e.branchId]; loc=(b?b.name:'—')+' (Branch)'; }
       else { const u=g.uMap[e.unitId]; const b=u?g.bMap[u.branchId]:null; loc=(u?u.name:'—')+(b?' • '+b.name:'')+' (Unit)'; }
     }
@@ -1381,7 +1389,7 @@ async function viewAlbum(q){
     const groups = regions.map(r=>({label:r.name, opts:g.cons.filter(c=>c.regionId===r.id).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>({v:'con:'+c.id,t:c.name}))}));
     conOpts = `<select id="albCon"><option value="">All constituencies</option>${groups.map(grp=>`<optgroup label="${esc(grp.label)}">${grp.opts.map(o=>`<option value="${esc(o.v)}" ${q.con===o.v?'selected':''}>${esc(o.t)}</option>`).join('')}</optgroup>`).join('')}</select>`;
   }
-  const levelOpts = `<option value="">All levels</option>`+(scoped?['constituency','ward','branch','unit']:['region','constituency','ward','branch','unit']).map(l=>`<option value="${l}" ${q.level===l?'selected':''}>${LVS[l]}</option>`).join('');
+  const levelOpts = `<option value="">All levels</option>`+(scoped?['constituency','ward','branch']:['region','constituency','ward','branch']).map(l=>`<option value="${l}" ${q.level===l?'selected':''}>${LVS[l]}</option>`).join('');
   const scopeName = scoped? ((g.cMap[scoped]||{}).name||'') : NATION_NAME;
 
   return `
@@ -1495,7 +1503,7 @@ async function viewData(){
     </div>
   </div>`;
 }
-const CSV_COLS = ['level','region','constituency','ward','branch','unit','fullName','memberId','position','gender','phone','email','dob','occupation','address','background'];
+const CSV_COLS = ['level','region','constituency','ward','branch','fullName','memberId','position','gender','phone','email','dob','occupation','address','background'];
 const EXPORT_COLS = ['regNo'].concat(CSV_COLS);
 function csvEscape(v){ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 function toCSV(rows, cols=CSV_COLS){ return [cols.join(',')].concat(rows.map(r=>cols.map(c=>csvEscape(r[c])).join(','))).join('\n'); }
@@ -1517,7 +1525,6 @@ async function exportExecsCSV(){
   const execs = g.execs.filter(e=> scoped? g.conOf(e)===scoped : true);
   const wn=id=>{const x=(g.wMap[id]||{});return x.name||'';};
   const bn=id=>{const x=(g.bMap[id]||{});return x.name||'';};
-  const un=id=>{const x=(g.uMap[id]||{});return x.name||'';};
   const rn=(rid)=> (g.rMap[rid]||{}).name||'';
   const cn=(e)=>{ const cid=g.conOf(e); if(!cid) return ''; return (g.cMap[cid]||{}).name||''; };
   const rows=execs.map(e=>{
@@ -1526,9 +1533,8 @@ async function exportExecsCSV(){
     regNo:e.regNo||'', level:e.level,
     region: rn(rid),
     constituency: e.level==='constituency'? (g.cMap[e.constituencyId]||{}).name||'' : cn(e),
-    ward:e.level==='ward'?wn(e.wardId):(e.level==='branch'?wn((g.bMap[e.branchId]||{}).wardId):(e.level==='unit'?wn((g.bMap[(g.uMap[e.unitId]||{}).branchId]||{}).wardId):'')),
-    branch:e.level==='branch'?bn(e.branchId):(e.level==='unit'?bn((g.uMap[e.unitId]||{}).branchId):''),
-    unit:e.level==='unit'?un(e.unitId):'',
+    ward:e.level==='ward'?wn(e.wardId):(e.level==='branch'?wn((g.bMap[e.branchId]||{}).wardId):''),
+    branch:e.level==='branch'?bn(e.branchId):'',
     fullName:e.fullName, memberId:e.memberId||'', position:e.position, gender:e.gender, phone:e.phone, email:e.email, dob:e.dob, occupation:e.occupation, address:e.address, background:e.background
   };});
   const fname = scoped? `ndc_${((g.cMap[scoped]||{}).code||scoped).toLowerCase()}_executives_${new Date().toISOString().slice(0,10)}.csv` : `ndc_ghana_executives_${new Date().toISOString().slice(0,10)}.csv`;
@@ -1542,7 +1548,7 @@ async function importCSV(file){
   if(idx.fullName<0||idx.level<0){ toast('Missing required columns (level, fullName)',true); return; }
   const g = await loadGraph();
   const scoped = userConId();
-  let wards=g.wards.slice(), branches=g.branches.slice(), units=g.units.slice(), cons=g.cons.slice();
+  let wards=g.wards.slice(), branches=g.branches.slice(), cons=g.cons.slice();
   // Resolve a region by name or code.
   const findRegion=(name)=>{
     name=(name||'').trim(); if(!name) return null;
@@ -1559,13 +1565,12 @@ async function importCSV(file){
   };
   const findOrCreate=async (type,name,parentField,parentId,extra)=>{
     name=(name||'').trim(); if(!name) return null;
-    let coll = type==='ward'?wards:type==='branch'?branches:units;
+    let coll = type==='ward'?wards:branches;
     let found = coll.find(x=>x.name.toLowerCase()===name.toLowerCase() && (!parentField || x[parentField]===parentId));
     if(found) return found;
     const rec=Object.assign({id:uid(),name,type,createdAt:nowISO(),updatedAt:nowISO()}, extra||{}); if(parentField) rec[parentField]=parentId;
     if(type==='ward') await SB.upsert('ndc_wards', wardToRow(rec));
     else if(type==='branch') await SB.upsert('ndc_branches', branchToRow(rec));
-    else if(type==='unit') await SB.upsert('ndc_units', unitToRow(rec));
     coll.push(rec); return rec;
   };
   let ok=0, fail=0, errs=[];
@@ -1573,7 +1578,7 @@ async function importCSV(file){
     const row=rows[r]; if(!row.length||!(row[idx.fullName]||'').trim()) continue;
     const get=(k)=>(idx[k]>=0?(row[idx[k]]||'').trim():'');
     const level=get('level').toLowerCase();
-    if(!['region','constituency','ward','branch','unit'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level`); continue; }
+    if(!['region','constituency','ward','branch'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level`); continue; }
     if(!get('fullName')||!get('memberId')||!get('position')||!get('gender')||!get('phone')){ fail++; errs.push(`Row ${r+1}: missing required field`); continue; }
     const regionIdHint = findRegion(get('region'));
     if(level==='region'){
@@ -1587,17 +1592,15 @@ async function importCSV(file){
     const conId = findCon(get('constituency'), regionIdHint);
     if(!conId){ fail++; errs.push(`Row ${r+1}: constituency not found / not in your scope`); continue; }
     if(!inScope(conId)){ fail++; errs.push(`Row ${r+1}: constituency outside your scope`); continue; }
-    let wardId=null,branchId=null,unitId=null;
-    if(level==='ward'||level==='branch'||level==='unit'){ const w=await findOrCreate('ward',get('ward'),null,null,{constituencyId:conId}); if(w) wardId=w.id; }
-    if(level==='branch'||level==='unit'){ const b=await findOrCreate('branch',get('branch'),'wardId',wardId); if(b) branchId=b.id; }
-    if(level==='unit'){ const u=await findOrCreate('unit',get('unit'),'branchId',branchId); if(u) unitId=u.id; }
-    if(level==='ward'&&!wardId){ fail++; errs.push(`Row ${r+1}: ward name required`); continue; }
+    let wardId=null,branchId=null;
+    if(level==='ward'||level==='branch'){ const w=await findOrCreate('ward',get('ward'),null,null,{constituencyId:conId}); if(w) wardId=w.id; }
+    if(level==='branch'){ const b=await findOrCreate('branch',get('branch'),'wardId',wardId); if(b) branchId=b.id; }
+    if(level==='ward'&&!wardId){ fail++; errs.push(`Row ${r+1}: zonal/electoral area name required`); continue; }
     if(level==='branch'&&!branchId){ fail++; errs.push(`Row ${r+1}: branch name required`); continue; }
-    if(level==='unit'&&!unitId){ fail++; errs.push(`Row ${r+1}: unit name required`); continue; }
     const id=uid();
     const rec={id, level, fullName:get('fullName'), memberId:get('memberId'), position:get('position'), gender:(get('gender').toLowerCase()), phone:get('phone'), email:get('email'), dob:get('dob'), occupation:get('occupation'), address:get('address'), background:get('background'), status:'active', photo:'', createdAt:nowISO(), updatedAt:nowISO(), createdBy:State.session.username};
     if(level==='constituency') rec.constituencyId=conId;
-    else rec[level+'Id'] = level==='ward'?wardId:level==='branch'?branchId:unitId;
+    else rec[level+'Id'] = level==='ward'?wardId:branchId;
     rec.regNo = await nextRegNo(await prefixForExec(rec));
     await SB.upsert('ndc_executives', execToRow(rec)); ok++;
   }
@@ -1638,7 +1641,7 @@ async function restoreBackup(file){
 }
 function wireData(){
   $('[data-act=exportCsv]').onclick=exportExecsCSV;
-  $('[data-act=downloadTemplate]').onclick=()=>{ download('ndc_import_template.csv', CSV_COLS.join(',')+'\nward,Western Region,Essikado-Ketan,Esikado Central,,,Ama Mensah,NDC-123456,Chairman,female,0244000000,,1985-03-12,Trader,Esikado,5 years organizing\n','text/csv'); };
+  $('[data-act=downloadTemplate]').onclick=()=>{ download('ndc_import_template.csv', CSV_COLS.join(',')+'\nward,Western Region,Essikado-Ketan,Esikado Central,,Ama Mensah,NDC-123456,Zonal Coordinator,female,0244000000,,1985-03-12,Trader,Esikado,5 years organizing\n','text/csv'); };
   const ci=$('#csvIn'); $('[data-act=pickCsv]').onclick=()=>ci.click(); ci.onchange=e=>{ if(e.target.files[0]) importCSV(e.target.files[0]); };
   $('[data-act=backup]').onclick=fullBackup;
   const bk=$('#bkIn'); if(bk){ $('[data-act=restore]').onclick=()=>bk.click(); bk.onchange=e=>{ if(e.target.files[0]) restoreBackup(e.target.files[0]); }; }
@@ -1664,8 +1667,7 @@ async function viewAdmin(){
     users = allUsers.filter(u=>u.scopeConstituencyId===ownCon);
     const wards = g.wards.filter(w=>w.constituencyId===ownCon);
     const branches = g.branches.filter(b=>(g.wMap[b.wardId]||{}).constituencyId===ownCon);
-    const units = g.units.filter(u=>{const b=g.bMap[u.branchId];return b&&(g.wMap[b.wardId]||{}).constituencyId===ownCon;});
-    coverageHtml = `<p class="muted small" style="margin:0">${esc(conName(ownCon))} • ${wards.length} ward(s) • ${branches.length} branch(es) • ${units.length} unit(s)</p>`;
+    coverageHtml = `<p class="muted small" style="margin:0">${esc(conName(ownCon))} • ${wards.length} zonal/electoral area(s) • ${branches.length} branch(es)</p>`;
   }
 
   const roleBadge = (role)=> role==='national_admin'?'y':role==='constituency_admin'?'':'k';
@@ -1683,7 +1685,7 @@ async function viewAdmin(){
     <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span><button class="btn sm primary" data-act="newUser">＋ User</button></div>
     ${users.length? `<div class="list">`+users.map(u=>`
       <div class="item"><div class="av">${initials(u.fullName||u.username)}</div>
-        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${roleBadge(u.role)}">${esc(u.role.replace(/_/g,' '))}</span>${u.suspended?' <span class="badge r">suspended</span>':''}</div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}</div></div>
+        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${roleBadge(u.role)}">${esc(roleLabel(u.role))}</span>${u.suspended?' <span class="badge r">suspended</span>':''}</div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}</div></div>
         ${canManage(u)?`
         <div class="row" style="gap:6px;flex:0 0 auto">
           <button class="btn sm" data-act="toggleSuspend" data-id="${esc(u.username)}" data-suspended="${u.suspended?'1':'0'}" title="${u.suspended?'Unsuspend':'Suspend'}">${u.suspended?'▶':'⏸'}</button>
@@ -1739,14 +1741,14 @@ function wireAdmin(){
    ============================================================ */
 async function viewAccount(){
   const u = State.session;
-  const roleLabel = (u.role||'').replace(/_/g,' ');
+  const userRoleLabel = roleLabel(u.role);
   const scopeLine = u.scopeConstituencyId ? `<p class="muted small" style="margin:4px 0 0">Constituency: ${esc(u.scopeConstituencyName||u.scopeConstituencyId)}</p>` : '';
   return `
   <div class="section-head"><h2>My account</h2></div>
 
   <div class="card pad">
     <h3 style="font-size:15px;margin-bottom:4px">${esc(u.fullName||u.username)}</h3>
-    <p class="muted small" style="margin:0">@${esc(u.username)} • ${esc(roleLabel)}</p>
+    <p class="muted small" style="margin:0">@${esc(u.username)} • ${esc(userRoleLabel)}</p>
     ${scopeLine}
   </div>
 
@@ -1787,7 +1789,7 @@ async function newUserFlow(){
     conField = `<div class="field" id="nuConField"><label>Constituency</label><select id="nuCon"><option value="">Select…</option>${conGroups}</select></div>`;
     roleOptions = `
       <option value="constituency_admin">Constituency Admin</option>
-      <option value="ward_admin">Ward Admin</option>
+      <option value="ward_admin">Zonal/Electoral Area Admin</option>
       <option value="branch_admin">Branch Admin</option>
       <option value="viewer">Viewer</option>
       <option value="national_admin">National Admin</option>`;
@@ -1796,7 +1798,7 @@ async function newUserFlow(){
     conField = `<input type="hidden" id="nuCon" value="${esc(ownCon)}"><p class="muted small" style="margin:-4px 0 8px">This account will be created for ${esc(conName)}.</p>`;
     roleOptions = `
       <option value="constituency_admin">Constituency Admin</option>
-      <option value="ward_admin">Ward Admin</option>
+      <option value="ward_admin">Zonal/Electoral Area Admin</option>
       <option value="branch_admin">Branch Admin</option>
       <option value="viewer">Viewer</option>`;
   }
