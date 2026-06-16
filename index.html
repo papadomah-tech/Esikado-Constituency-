@@ -205,6 +205,10 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 .album-print-head .pm{font-size:11px;font-style:italic;color:var(--muted);margin-top:4px;letter-spacing:.04em}
 .album-print-foot{text-align:center;font-size:13px;font-weight:800;color:var(--green-dark);margin-top:16px;padding-top:8px;border-top:1px solid #ddd}
 .report-row{font-size:13px;margin-top:6px}
+.reg-print-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:10px}
+.reg-print-table th{background:var(--green-soft);color:var(--green-dark);font-weight:700;padding:5px 6px;text-align:left;border:1px solid #ccc}
+.reg-print-table td{padding:4px 6px;border:1px solid #ddd;vertical-align:top}
+.reg-print-table tr:nth-child(even) td{background:#f9f9f9}
 
 @media print{
   @page{margin:12mm}
@@ -218,6 +222,7 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
   .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important;cursor:auto}
   .album-ward-head{break-after:avoid;page-break-after:avoid}
   .album-print-foot{break-inside:avoid;page-break-inside:avoid}
+  #regListView,#regAlbumView,.reg-screen-only{display:none !important}
   .card{box-shadow:none !important}
 }
 </style>
@@ -1289,29 +1294,133 @@ async function viewBranchRegister(branchId){
   if(!inScope(conId)) return denyView();
   if(!canManageRegister(branchId)) return denyView();
   const members = await Data.branchRegister(branchId);
+  const male = members.filter(m=>m.gender==='male').length;
+  const female = members.filter(m=>m.gender==='female').length;
 
   return `
   <div class="crumb"><a href="#/branch/${branchId}">‹ ${esc(branch.name)}</a></div>
-  <div class="section-head"><h2>Branch Register</h2><span class="sub">${esc(branch.name)}</span><span class="spacer"></span>
+  <div class="section-head reg-screen-only"><h2>Branch Register</h2><span class="sub">${esc(branch.name)}</span><span class="spacer"></span>
     <button class="btn sm primary" data-link="#/register/${branchId}/member/new">＋ Add member</button>
   </div>
 
-  <div class="card pad">
-    <p class="muted small" style="margin:0 0 10px">Every registered party member at this branch, with an auto-generated registry number. This list is used to verify identity when members file nominations for branch positions, and becomes the source of branch executive records once a member wins an election.</p>
-    ${members.length? `<div class="list">`+members.map(m=>`
-      <div class="item" data-link="#/register/${branchId}/member/${esc(m.id)}/edit">
-        <div class="av">${m.photo?`<img src="${m.photo}" alt="">`:initials(m.fullName)}</div>
-        <div class="body"><div class="nm">${esc(m.fullName)} <span class="reg">${esc(m.registryNo)}</span></div><div class="mt">${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))} • ${esc(m.phone||'—')}${m.dob?' • '+fmtDate(m.dob):''}${m.memberId?' • '+esc(m.memberId):''}</div></div>
-        <div class="chev">›</div>
-      </div>`).join('')+`</div>` : `<p class="muted small" style="margin:0">No members registered yet. Use ＋ Add member to begin compiling the register.</p>`}
+  <!-- Stats -->
+  <div class="grid-stat reg-screen-only" style="margin-bottom:14px">
+    <div class="stat g"><div class="n">${members.length}</div><div class="l">Total members</div></div>
+    <div class="stat k"><div class="n">${male}</div><div class="l">Male</div></div>
+    <div class="stat y"><div class="n">${female}</div><div class="l">Female</div></div>
+    <div class="stat r"><div class="n">${members.length - male - female}</div><div class="l">Unspecified</div></div>
   </div>
 
-  <div class="card pad" style="margin-top:14px">
-    <h3 style="font-size:15px;margin-bottom:6px">Total registered</h3>
-    <p class="muted small" style="margin:0"><b>${members.length}</b> member(s) on the register for ${esc(branch.name)}.</p>
+  <!-- Tabs -->
+  <div class="tabs no-print" id="regTabs" style="margin-bottom:0">
+    <button class="tab active" data-tab="list">📋 Register list</button>
+    <button class="tab" data-tab="album">📸 Photo album</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters no-print" id="regFilters">
+    <input id="regSearch" placeholder="Search name or registry number…" style="flex:1;min-width:160px">
+    <select id="regGender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
+    <select id="regSort"><option value="reg">Sort: Registry No.</option><option value="name">Sort: Name</option></select>
+    <button class="btn sm" data-act="printRegister">🖨️ Print register</button>
+  </div>
+
+  <!-- List view -->
+  <div id="regListView">
+    ${members.length ? `<div class="list" id="regList">`+members.map(m=>`
+      <div class="item reg-item" data-link="#/register/${branchId}/member/${esc(m.id)}/edit"
+           data-name="${esc(m.fullName.toLowerCase())}" data-reg="${esc(m.registryNo.toLowerCase())}" data-gender="${esc(m.gender||'')}">
+        <div class="av">${m.photo?`<img src="${m.photo}" alt="">`:initials(m.fullName)}</div>
+        <div class="body">
+          <div class="nm">${esc(m.fullName)} <span class="reg">${esc(m.registryNo)}</span></div>
+          <div class="mt">${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))} • ${esc(m.phone||'—')}${m.dob?' • '+fmtDate(m.dob):''}${m.memberId?' • '+esc(m.memberId):''}</div>
+        </div>
+        <div class="chev">›</div>
+      </div>`).join('')+`</div>`
+    : `<p class="muted small" style="margin:0">No members registered yet. Use ＋ Add member to begin compiling the register.</p>`}
+  </div>
+
+  <!-- Album view (hidden by default) -->
+  <div id="regAlbumView" style="display:none">
+    <div class="album-grid" id="regAlbumGrid"></div>
+  </div>
+
+  <!-- Print-only register table -->
+  <div class="print-only" id="regPrintTable">
+    <div class="album-print-head">
+      <img src="${LOGO_FULL}" alt="NDC">
+      <div class="pt">${esc(branch.name)} — Branch Member Register</div>
+      <div class="ps">${members.length} registered member(s) • Printed ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div class="pm">${esc(PARTY_MOTTO)}</div>
+    </div>
+    <table class="reg-print-table">
+      <thead><tr><th>#</th><th>Registry No.</th><th>Full Name</th><th>NDC ID</th><th>Gender</th><th>Date of Birth</th><th>Phone</th></tr></thead>
+      <tbody>${members.map((m,i)=>`
+        <tr><td>${i+1}</td><td><b>${esc(m.registryNo)}</b></td><td>${esc(m.fullName)}</td><td>${esc(m.memberId||'—')}</td><td>${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))}</td><td>${esc(m.dob?fmtDate(m.dob):'—')}</td><td>${esc(m.phone||'—')}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="album-print-foot">${esc(PARTY_SLOGAN)}</div>
   </div>`;
 }
-function wireBranchRegister(branchId){ /* list page uses data-link navigation only */ }
+function wireBranchRegister(branchId){
+  // Tab switching
+  document.querySelectorAll('#regTabs .tab').forEach(tab=>{
+    tab.onclick=()=>{
+      document.querySelectorAll('#regTabs .tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      const view = tab.dataset.tab;
+      $('#regListView').style.display = view==='list' ? '' : 'none';
+      $('#regAlbumView').style.display = view==='album' ? '' : 'none';
+      if(view==='album') buildRegAlbum(branchId);
+      filterRegList();
+    };
+  });
+
+  // Search + gender filter
+  const search=$('#regSearch'), gender=$('#regGender'), sort=$('#regSort');
+  if(search) search.oninput = filterRegList;
+  if(gender) gender.onchange = filterRegList;
+  if(sort) sort.onchange = ()=>{ filterRegList(); buildRegAlbum(branchId); };
+}
+
+function filterRegList(){
+  const q=($('#regSearch')||{}).value||'', g=($('#regGender')||{}).value||'', s=($('#regSort')||{}).value||'reg';
+  const items=[...document.querySelectorAll('.reg-item')];
+  items.forEach(el=>{
+    const nameMatch = !q || el.dataset.name.includes(q.toLowerCase()) || el.dataset.reg.includes(q.toLowerCase());
+    const genderMatch = !g || el.dataset.gender===g;
+    el.style.display = (nameMatch&&genderMatch) ? '' : 'none';
+  });
+  // Re-sort visible items
+  const list=$('#regList'); if(!list) return;
+  const visible = items.filter(el=>el.style.display!=='none');
+  visible.sort((a,b)=> s==='name'
+    ? a.dataset.name.localeCompare(b.dataset.name)
+    : a.dataset.reg.localeCompare(b.dataset.reg));
+  visible.forEach(el=>list.appendChild(el));
+}
+
+async function buildRegAlbum(branchId){
+  const grid=$('#regAlbumGrid'); if(!grid) return;
+  const q=($('#regSearch')||{}).value||'', g=($('#regGender')||{}).value||'', s=($('#regSort')||{}).value||'reg';
+  let members = await Data.branchRegister(branchId);
+  if(q) members = members.filter(m=>m.fullName.toLowerCase().includes(q.toLowerCase())||m.registryNo.toLowerCase().includes(q.toLowerCase()));
+  if(g) members = members.filter(m=>m.gender===g);
+  members.sort((a,b)=> s==='name' ? a.fullName.localeCompare(b.fullName) : a.registryNo.localeCompare(b.registryNo));
+  if(!members.length){ grid.innerHTML=`<p class="muted small" style="padding:12px">No members match the current filter.</p>`; return; }
+  grid.innerHTML = members.map(m=>`
+    <div class="album-card" data-link="#/register/${branchId}/member/${esc(m.id)}/edit">
+      <div class="album-photo">${m.photo?`<img src="${m.photo}" alt="${esc(m.fullName)}">`:`<span class="ph-init">${initials(m.fullName)}</span>`}</div>
+      <div class="album-meta">
+        <div class="reg">${esc(m.registryNo)}</div>
+        <div class="nm">${esc(m.fullName)}</div>
+        <div class="pos">${esc((m.gender||'').replace(/^./,c=>c.toUpperCase()))}${m.dob?' • '+fmtDate(m.dob):''}</div>
+        <div class="loc">${esc(m.phone||'—')}</div>
+      </div>
+    </div>`).join('');
+  // Wire album card clicks
+  grid.querySelectorAll('[data-link]').forEach(el=>{ el.style.cursor='pointer'; el.onclick=()=>{ location.hash=el.dataset.link; render(); }; });
+}
 
 /* ============================================================
    BRANCH REGISTER — member form (create/edit)
@@ -2622,6 +2731,7 @@ async function onAction(e){
   if(act==='takePhoto'){ const c=$('#camIn'); if(c) c.click(); return; }
   if(act==='pickPhoto'){ const g=$('#galIn'); if(g) g.click(); return; }
   if(act==='printReport') return window.print();
+  if(act==='printRegister') return window.print();
   if(act==='recordResults') return doRecordResults();
   if(act==='newCycle') return doNewCycle();
 }
