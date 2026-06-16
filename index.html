@@ -215,6 +215,11 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
   #regPrintTable.reg-print-hide{display:none !important}
   #regPrintAlbum .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
   #regPrintAlbum .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important}
+  #zonalPrintAlbum.reg-print-active{display:block !important}
+  #zonalPrintTable.reg-print-hide{display:none !important}
+  #zonalPrintAlbum .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
+  #zonalPrintAlbum .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important}
+  #zonalListView,#zonalAlbumView{display:none !important}
 }
 
 @media print{
@@ -579,6 +584,12 @@ function canManageRegister(branchId){
   if(State.session && State.session.role==='branch_admin') return true;
   return isBranchSecretaryFor(branchId);
 }
+// Read-only access to the branch register (view, search, print — no add/edit/delete).
+function canViewRegister(branchId){
+  if(canManageRegister(branchId)) return true;
+  return !!(State.session && State.session.role==='ward_admin');
+}
+function isWardAdmin(){ return !!(State.session && State.session.role==='ward_admin'); }
 
 /* ---------------- Data accessors (Supabase-backed) ---------------- */
 const Data = {
@@ -689,7 +700,10 @@ async function _render(){
     else if(route==='constituency'){ c.innerHTML = await viewConstituencyDetail(parts[1]); }
     else if(route==='regional'){ c.innerHTML = await viewRegional(parts[1]); }
     else if(route==='wards'){ location.hash = isNational()?'#/constituencies':('#/constituency/'+(userConId()||'')); return; }
-    else if(route==='ward'){ c.innerHTML = await viewOrgDetail('ward', parts[1]); }
+    else if(route==='ward'){
+      if(parts[2]==='register'){ c.innerHTML = await viewZonalRegister(parts[1]); wireZonalRegister(parts[1]); }
+      else { c.innerHTML = await viewOrgDetail('ward', parts[1]); }
+    }
     else if(route==='branch'){ c.innerHTML = await viewOrgDetail('branch', parts[1]); }
     else if(route==='unit'){ c.innerHTML = await viewOrgDetail('unit', parts[1]); }
     else if(route==='register'){
@@ -1199,7 +1213,8 @@ async function viewOrgDetail(level, id){
   return `
   ${crumbs}
   <div class="section-head"><h2>${esc(node.name)}</h2><span class="badge ${level==='ward'?'':level==='branch'?'y':'r'}">${LVS[level]}</span><span class="spacer"></span>
-    ${(level==='branch'&&canManageRegister(id))?`<button class="btn sm" data-link="#/register/${id}">📋 Branch Register</button>`:''}
+    ${(level==='ward'&&canViewRegister(id))?`<button class="btn sm" data-link="#/ward/${id}/register">📋 Zonal Register</button>`:''}
+    ${(level==='branch'&&canViewRegister(id))?`<button class="btn sm" data-link="#/register/${id}">📋 Branch Register</button>`:''}
     ${can('edit')?`<button class="btn sm" data-act="editOrg" data-level="${level}" data-id="${id}">Edit</button>`:''}
     ${can('delete')?`<button class="btn sm danger" data-act="delOrg" data-level="${level}" data-id="${id}">Delete</button>`:''}
   </div>
@@ -1299,15 +1314,16 @@ async function viewBranchRegister(branchId){
   if(!branch) return emptyState('🚫','Not found','This branch may have been deleted.');
   const conId = await constituencyIdOf(branch);
   if(!inScope(conId)) return denyView();
-  if(!canManageRegister(branchId)) return denyView();
+  if(!canViewRegister(branchId)) return denyView();
   const members = await Data.branchRegister(branchId);
   const male = members.filter(m=>m.gender==='male').length;
   const female = members.filter(m=>m.gender==='female').length;
+  const canEdit = canManageRegister(branchId);
 
   return `
   <div class="crumb"><a href="#/branch/${branchId}">‹ ${esc(branch.name)}</a></div>
   <div class="section-head reg-screen-only"><h2>Branch Register</h2><span class="sub">${esc(branch.name)}</span><span class="spacer"></span>
-    <button class="btn sm primary" data-link="#/register/${branchId}/member/new">＋ Add member</button>
+    ${canEdit?`<button class="btn sm primary" data-link="#/register/${branchId}/member/new">＋ Add member</button>`:'<span class="badge k">View only</span>'}
   </div>
 
   <!-- Stats -->
@@ -1335,14 +1351,14 @@ async function viewBranchRegister(branchId){
   <!-- List view -->
   <div id="regListView">
     ${members.length ? `<div class="list" id="regList">`+members.map(m=>`
-      <div class="item reg-item" data-link="#/register/${branchId}/member/${esc(m.id)}/edit"
+      <div class="item reg-item" ${canEdit?`data-link="#/register/${branchId}/member/${esc(m.id)}/edit"`:''}
            data-name="${esc(m.fullName.toLowerCase())}" data-reg="${esc(m.registryNo.toLowerCase())}" data-gender="${esc(m.gender||'')}">
         <div class="av">${m.photo?`<img src="${m.photo}" alt="">`:initials(m.fullName)}</div>
         <div class="body">
           <div class="nm">${esc(m.fullName)} <span class="reg">${esc(m.registryNo)}</span></div>
           <div class="mt">${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))} • ${esc(m.phone||'—')}${m.dob?' • '+fmtDate(m.dob):''}${m.memberId?' • '+esc(m.memberId):''}</div>
         </div>
-        <div class="chev">›</div>
+        ${canEdit?`<div class="chev">›</div>`:''}
       </div>`).join('')+`</div>`
     : `<p class="muted small" style="margin:0">No members registered yet. Use ＋ Add member to begin compiling the register.</p>`}
   </div>
@@ -1464,6 +1480,222 @@ async function buildRegAlbum(branchId){
       </div>
     </div>`).join('');
   // Wire album card clicks
+  grid.querySelectorAll('[data-link]').forEach(el=>{ el.style.cursor='pointer'; el.onclick=()=>{ location.hash=el.dataset.link; render(); }; });
+}
+
+/* ============================================================
+   ZONAL/ELECTORAL AREA REGISTER & ALBUM
+   Aggregates all branch registers across every branch in a
+   zonal/electoral area. Read-only for Zonal/Electoral Area
+   Admins; full access for Constituency/National Admins.
+   ============================================================ */
+async function viewZonalRegister(wardId){
+  const ward = await Data.get('ward:'+wardId);
+  if(!ward) return emptyState('🚫','Not found','This zonal/electoral area may have been deleted.');
+  const conId = ward.constituencyId;
+  if(!inScope(conId)) return denyView();
+  if(!canViewRegister(wardId)) return denyView();
+
+  // Load all branches in this ward and their registers
+  const branches = (await Data.branches()).filter(b=>b.wardId===wardId);
+  // Load all members across all branches (in parallel)
+  const allMembersNested = await Promise.all(branches.map(b=>Data.branchRegister(b.id)));
+  // Attach branch info to each member for grouping/display
+  const allMembers = allMembersNested.flatMap((ms, i)=> ms.map(m=>({...m, _branchName: branches[i].name, _branchId: branches[i].id})));
+
+  const male = allMembers.filter(m=>m.gender==='male').length;
+  const female = allMembers.filter(m=>m.gender==='female').length;
+
+  return `
+  <div class="crumb"><a href="#/ward/${wardId}">‹ ${esc(ward.name)}</a></div>
+  <div class="section-head reg-screen-only"><h2>Zonal Register</h2><span class="sub">${esc(ward.name)}</span></div>
+
+  <div class="grid-stat reg-screen-only" style="margin-bottom:14px">
+    <div class="stat g"><div class="n">${allMembers.length}</div><div class="l">Total members</div></div>
+    <div class="stat k"><div class="n">${male}</div><div class="l">Male</div></div>
+    <div class="stat y"><div class="n">${female}</div><div class="l">Female</div></div>
+    <div class="stat r"><div class="n">${branches.length}</div><div class="l">Branches</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs no-print" id="zonalTabs" style="margin-bottom:0">
+    <button class="tab active" data-tab="list">📋 Register list</button>
+    <button class="tab" data-tab="album">📸 Photo album</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters no-print" id="zonalFilters">
+    <input id="zonalSearch" placeholder="Search name or registry number…" style="flex:1;min-width:160px">
+    <select id="zonalBranch"><option value="">All branches</option>${branches.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select>
+    <select id="zonalGender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
+    <select id="zonalSort"><option value="reg">Sort: Registry No.</option><option value="name">Sort: Name</option></select>
+    <button class="btn sm" id="zonalPrintBtn">🖨️ Print register</button>
+  </div>
+
+  <!-- List view grouped by branch -->
+  <div id="zonalListView">
+    ${branches.length ? branches.map((b,i)=>{
+      const ms = allMembersNested[i];
+      return `<div class="album-ward-head">${esc(b.name)} <span class="ct">${ms.length}</span></div>
+      <div class="list zonal-branch-group" data-branch="${esc(b.id)}">${ms.length ? ms.map(m=>`
+        <div class="item zonal-item" data-link="#/register/${b.id}/member/${esc(m.id)}/edit"
+             data-name="${esc(m.fullName.toLowerCase())}" data-reg="${esc(m.registryNo.toLowerCase())}"
+             data-gender="${esc(m.gender||'')}" data-branch="${esc(b.id)}">
+          <div class="av">${m.photo?`<img src="${m.photo}" alt="">`:initials(m.fullName)}</div>
+          <div class="body">
+            <div class="nm">${esc(m.fullName)} <span class="reg">${esc(m.registryNo)}</span></div>
+            <div class="mt">${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))} • ${esc(m.phone||'—')}${m.dob?' • '+fmtDate(m.dob):''}</div>
+          </div>
+          <div class="chev">›</div>
+        </div>`).join('')
+        : `<p class="muted small" style="padding:8px 0">No members registered for this branch yet.</p>`}
+      </div>`;
+    }).join('') : `<p class="muted small">No branches in this zonal/electoral area yet.</p>`}
+  </div>
+
+  <!-- Album view -->
+  <div id="zonalAlbumView" style="display:none">
+    <div class="album-grid" id="zonalAlbumGrid"></div>
+  </div>
+
+  <!-- Print-only register table -->
+  <div class="print-only" id="zonalPrintTable">
+    <div class="album-print-head">
+      <img src="${LOGO_FULL}" alt="NDC">
+      <div class="pt">${esc(ward.name)} — Zonal Member Register</div>
+      <div class="ps">${allMembers.length} registered member(s) across ${branches.length} branch(es) • Printed ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div class="pm">${esc(PARTY_MOTTO)}</div>
+    </div>
+    ${branches.map((b,i)=>{
+      const ms = allMembersNested[i];
+      return `<div style="margin-top:12px"><b style="font-size:13px">${esc(b.name)}</b>
+      <table class="reg-print-table">
+        <thead><tr><th>#</th><th>Registry No.</th><th>Full Name</th><th>NDC ID</th><th>Gender</th><th>Date of Birth</th><th>Phone</th></tr></thead>
+        <tbody>${ms.map((m,j)=>`<tr><td>${j+1}</td><td><b>${esc(m.registryNo)}</b></td><td>${esc(m.fullName)}</td><td>${esc(m.memberId||'—')}</td><td>${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))}</td><td>${esc(m.dob?fmtDate(m.dob):'—')}</td><td>${esc(m.phone||'—')}</td></tr>`).join('')}
+        </tbody>
+      </table></div>`;
+    }).join('')}
+    <div class="album-print-foot">${esc(PARTY_SLOGAN)}</div>
+  </div>
+
+  <!-- Print-only album -->
+  <div class="print-only" id="zonalPrintAlbum">
+    <div class="album-print-head">
+      <img src="${LOGO_FULL}" alt="NDC">
+      <div class="pt">${esc(ward.name)} — Zonal Member Photo Album</div>
+      <div class="ps">${allMembers.length} registered member(s) • Printed ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div class="pm">${esc(PARTY_MOTTO)}</div>
+    </div>
+    <div class="album-grid" id="zonalPrintAlbumGrid">
+      ${allMembers.map(m=>`
+        <div class="album-card">
+          <div class="album-photo">${m.photo?`<img src="${m.photo}" alt="${esc(m.fullName)}">`:`<span class="ph-init">${initials(m.fullName)}</span>`}</div>
+          <div class="album-meta">
+            <div class="reg">${esc(m.registryNo)}</div>
+            <div class="nm">${esc(m.fullName)}</div>
+            <div class="pos">${esc(m._branchName)}</div>
+            <div class="loc">${esc((m.gender||'').replace(/^./,c=>c.toUpperCase()))}${m.dob?' • '+fmtDate(m.dob):''}</div>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="album-print-foot">${esc(PARTY_SLOGAN)}</div>
+  </div>`;
+}
+
+function wireZonalRegister(wardId){
+  let activeTab = 'list';
+
+  // Tab switching
+  document.querySelectorAll('#zonalTabs .tab').forEach(tab=>{
+    tab.onclick=()=>{
+      document.querySelectorAll('#zonalTabs .tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      activeTab = tab.dataset.tab;
+      $('#zonalListView').style.display = activeTab==='list' ? '' : 'none';
+      $('#zonalAlbumView').style.display = activeTab==='album' ? '' : 'none';
+      const pb=$('#zonalPrintBtn');
+      if(pb) pb.textContent = activeTab==='album' ? '🖨️ Print album' : '🖨️ Print register';
+      if(activeTab==='album') buildZonalAlbum();
+      filterZonalList();
+    };
+  });
+
+  // Print button
+  const pb=$('#zonalPrintBtn');
+  if(pb) pb.onclick=(e)=>{
+    e.stopPropagation();
+    if(activeTab==='album'){
+      const sg=$('#zonalAlbumGrid'), pg=$('#zonalPrintAlbumGrid');
+      if(sg&&pg) pg.innerHTML = sg.innerHTML;
+      $('#zonalPrintAlbum').classList.add('reg-print-active');
+      $('#zonalPrintTable').classList.add('reg-print-hide');
+      window.print();
+      setTimeout(()=>{ $('#zonalPrintAlbum').classList.remove('reg-print-active'); $('#zonalPrintTable').classList.remove('reg-print-hide'); },500);
+    } else {
+      window.print();
+    }
+  };
+
+  // Filters
+  const search=$('#zonalSearch'), branch=$('#zonalBranch'), gender=$('#zonalGender'), sort=$('#zonalSort');
+  if(search) search.oninput = filterZonalList;
+  if(branch) branch.onchange = filterZonalList;
+  if(gender) gender.onchange = filterZonalList;
+  if(sort) sort.onchange = ()=>{ filterZonalList(); if(activeTab==='album') buildZonalAlbum(); };
+}
+
+function filterZonalList(){
+  const q=($('#zonalSearch')||{}).value||'';
+  const bFilter=($('#zonalBranch')||{}).value||'';
+  const gFilter=($('#zonalGender')||{}).value||'';
+  document.querySelectorAll('.zonal-item').forEach(el=>{
+    const nameMatch = !q || el.dataset.name.includes(q.toLowerCase()) || el.dataset.reg.includes(q.toLowerCase());
+    const branchMatch = !bFilter || el.dataset.branch===bFilter;
+    const genderMatch = !gFilter || el.dataset.gender===gFilter;
+    el.style.display = (nameMatch&&branchMatch&&genderMatch) ? '' : 'none';
+  });
+  // Hide/show branch group headers based on visible items
+  document.querySelectorAll('.zonal-branch-group').forEach(grp=>{
+    const hasVisible = [...grp.querySelectorAll('.zonal-item')].some(el=>el.style.display!=='none');
+    const head = grp.previousElementSibling;
+    if(head&&head.classList.contains('album-ward-head')) head.style.display = hasVisible ? '' : 'none';
+    grp.style.display = hasVisible ? '' : 'none';
+  });
+}
+
+async function buildZonalAlbum(){
+  const grid=$('#zonalAlbumGrid'); if(!grid) return;
+  const q=($('#zonalSearch')||{}).value||'';
+  const bFilter=($('#zonalBranch')||{}).value||'';
+  const gFilter=($('#zonalGender')||{}).value||'';
+  const s=($('#zonalSort')||{}).value||'reg';
+  // Collect members from visible zonal items
+  let items=[...document.querySelectorAll('.zonal-item')].filter(el=>
+    el.style.display!=='none' || (
+      (!q || el.dataset.name.includes(q.toLowerCase()) || el.dataset.reg.includes(q.toLowerCase())) &&
+      (!bFilter || el.dataset.branch===bFilter) &&
+      (!gFilter || el.dataset.gender===gFilter)
+    )
+  );
+  // Build album from item data (re-read from the list items)
+  const cards = items.map(el=>{
+    const nm=el.querySelector('.nm'); const loc=el.querySelector('.mt');
+    const av=el.querySelector('.av'); const img=av?av.querySelector('img'):null;
+    const regEl=el.querySelector('.reg'); const link=el.dataset.link||'';
+    const name=nm?nm.childNodes[0].textContent.trim():'';
+    const reg=regEl?regEl.textContent.trim():'';
+    const photo=img?img.src:'';
+    const sub=loc?loc.textContent:'';
+    return `<div class="album-card"${link?` data-link="${esc(link)}"`:''}>
+      <div class="album-photo">${photo?`<img src="${photo}" alt="${esc(name)}">`:`<span class="ph-init">${initials(name)}</span>`}</div>
+      <div class="album-meta">
+        <div class="reg">${esc(reg)}</div>
+        <div class="nm">${esc(name)}</div>
+        <div class="loc">${esc(sub)}</div>
+      </div>
+    </div>`;
+  });
+  grid.innerHTML = cards.length ? cards.join('') : `<p class="muted small" style="padding:12px">No members match the current filter.</p>`;
   grid.querySelectorAll('[data-link]').forEach(el=>{ el.style.cursor='pointer'; el.onclick=()=>{ location.hash=el.dataset.link; render(); }; });
 }
 
