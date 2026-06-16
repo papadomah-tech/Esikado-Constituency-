@@ -611,6 +611,16 @@ function compressImage(file, maxDim=620, quality=0.72){
     img.onerror=rej; img.src=url;
   });
 }
+// Shared photo picker handler — used by exec form and branch register member form.
+async function onPickPhoto(file){
+  if(!file) return;
+  try{
+    const data = await compressImage(file);
+    $('#photoData').value = data;
+    $('#photoPrev').innerHTML = `<img src="${data}">`;
+    const err = $('#photoErr'); if(err) err.classList.add('hidden');
+  }catch{ toast('Could not read that image', true); }
+}
 
 /* ============================================================
    ROUTER
@@ -1346,14 +1356,8 @@ async function viewRegMemberForm(branchId, memberId){
 function wireRegMemberForm(){
   const form=$('#regMemberForm'); if(!form) return;
   const cam=$('#camIn'), gal=$('#galIn');
-  const take=$('[data-act=takePhoto]'); if(take) take.onclick=()=>cam.click();
-  const pick=$('[data-act=pickPhoto]'); if(pick) pick.onclick=()=>gal.click();
-  const onPick = async (file)=>{ if(!file) return; try{ const data=await compressImage(file); $('#photoData').value=data; $('#photoPrev').innerHTML=`<img src="${data}">`; $('#photoErr').classList.add('hidden'); }catch{ toast('Could not read that image',true); } };
-  if(cam) cam.onchange=e=>onPick(e.target.files[0]);
-  if(gal) gal.onchange=e=>onPick(e.target.files[0]);
-  const cancel=$('[data-act=cancel]'); if(cancel) cancel.onclick=()=>history.back();
-  const save=$('[data-act=saveRegMember]'); if(save) save.onclick=saveRegMember;
-  const del=$('[data-act=delRegMember]'); if(del) del.onclick=delRegMember;
+  if(cam) cam.onchange=e=>onPickPhoto(e.target.files[0]);
+  if(gal) gal.onchange=e=>onPickPhoto(e.target.files[0]);
 }
 async function saveRegMember(){
   const form=$('#regMemberForm'); const branchId=form.dataset.branch; const id=form.dataset.id;
@@ -1565,83 +1569,82 @@ async function viewBranchElection(branchId){
   </div>
   `;
 }
+// Active branchId for the election page — set by wireBranchElection, read by onAction handlers.
+let _electionBranchId = null;
+
 function wireBranchElection(branchId){
-  const recordBtn = $('[data-act=recordResults]');
-  if(recordBtn) recordBtn.onclick = async()=>{
-    const branch = await Data.get('branch:'+branchId);
-    const positions = posForLevel(await Data.positions(),'branch');
-    const noms = await Data.nominations(branchId);
-    const cleared = noms.filter(n=>n.status==='cleared');
-    const members = await Data.branchRegister(branchId);
-    const memberByReg = {}; members.forEach(m=>memberByReg[m.registryNo]=m);
+  _electionBranchId = branchId;
+}
 
-    const go = await confirmModal('Record election results?', 'This determines the winner for each position from the vote counts entered, and adds each winner as a branch executive. This can be redone later by starting a new cycle.');
-    if(!go) return;
+async function doRecordResults(){
+  const branchId = _electionBranchId; if(!branchId) return;
+  const branch = await Data.get('branch:'+branchId);
+  const positions = posForLevel(await Data.positions(),'branch');
+  const noms = await Data.nominations(branchId);
+  const cleared = noms.filter(n=>n.status==='cleared');
+  const members = await Data.branchRegister(branchId);
+  const memberByReg = {}; members.forEach(m=>memberByReg[m.registryNo]=m);
 
-    let winnersCreated = 0;
-    const ties = [];
-    for(const position of positions){
-      const candidates = cleared.filter(n=>n.position===position);
-      if(!candidates.length) continue;
-      // Read vote counts from the form
-      const tallies = candidates.map(n=>{
-        const input = $('#votes-'+n.id);
-        const votes = input ? Math.max(0, parseInt(input.value,10)||0) : 0;
-        return {nom:n, votes};
-      });
-      const maxVotes = Math.max(...tallies.map(t=>t.votes));
-      const winners = tallies.filter(t=>t.votes===maxVotes && maxVotes>0);
-      // Save a result row for every candidate (winner flag only set if exactly one winner)
-      const singleWinner = winners.length===1 ? winners[0] : null;
-      if(winners.length>1) ties.push(position);
-      for(const t of tallies){
-        const rec = {
-          id: branchId+'-c'+(branch.electionCycle||1)+'-'+t.nom.id,
-          branchId, cycle:branch.electionCycle, nominationId:t.nom.id, position,
-          votes:t.votes, isWinner: !!(singleWinner && singleWinner.nom.id===t.nom.id),
+  const go = await confirmModal('Record election results?', 'This determines the winner for each position from the vote counts entered, and adds each winner as a branch executive. This can be redone later by starting a new cycle.');
+  if(!go) return;
+
+  let winnersCreated = 0;
+  const ties = [];
+  for(const position of positions){
+    const candidates = cleared.filter(n=>n.position===position);
+    if(!candidates.length) continue;
+    const tallies = candidates.map(n=>{
+      const input = $('#votes-'+n.id);
+      const votes = input ? Math.max(0, parseInt(input.value,10)||0) : 0;
+      return {nom:n, votes};
+    });
+    const maxVotes = Math.max(...tallies.map(t=>t.votes));
+    const winners = tallies.filter(t=>t.votes===maxVotes && maxVotes>0);
+    const singleWinner = winners.length===1 ? winners[0] : null;
+    if(winners.length>1) ties.push(position);
+    for(const t of tallies){
+      const rec = {
+        id: branchId+'-c'+(branch.electionCycle||1)+'-'+t.nom.id,
+        branchId, cycle:branch.electionCycle, nominationId:t.nom.id, position,
+        votes:t.votes, isWinner: !!(singleWinner && singleWinner.nom.id===t.nom.id),
+      };
+      await SB.upsert('ndc_election_results', resultToRow(rec));
+    }
+    if(singleWinner){
+      const member = memberByReg[singleWinner.nom.registryNo];
+      if(member){
+        const execId = 'branch-'+branchId+'-'+slugify(position);
+        const execRec = {
+          id: execId, level:'branch', branchId, position,
+          fullName: member.fullName, memberId: member.memberId, gender: member.gender,
+          phone: member.phone, email: member.email, dob: member.dob,
+          occupation: member.occupation, address: member.address, background: member.background,
+          photo: member.photo, status:'active',
+          createdAt: nowISO(), updatedAt: nowISO(), createdBy: State.session.username,
         };
-        await SB.upsert('ndc_election_results', resultToRow(rec));
-      }
-      if(singleWinner){
-        const member = memberByReg[singleWinner.nom.registryNo];
-        if(member){
-          const execId = 'branch-'+branchId+'-'+slugify(position);
-          const execRec = {
-            id: execId, level:'branch', branchId, position,
-            fullName: member.fullName, memberId: member.memberId, gender: member.gender,
-            phone: member.phone, email: member.email, dob: member.dob,
-            occupation: member.occupation, address: member.address, background: member.background,
-            photo: member.photo, status:'active',
-            createdAt: nowISO(), updatedAt: nowISO(), createdBy: State.session.username,
-          };
-          // Preserve an existing registration number if this position already has a record (re-run election)
-          const existing = await SB.select('ndc_executives','id=eq.'+encodeURIComponent(execId)+'&limit=1');
-          if(existing && existing[0]){ execRec.regNo = existing[0].reg_no; execRec.createdAt = existing[0].created_at; }
-          else { execRec.regNo = await nextRegNo(await prefixForExec({level:'branch',branchId})); winnersCreated++; }
-          await SB.upsert('ndc_executives', execToRow(execRec));
-        }
+        const existing = await SB.select('ndc_executives','id=eq.'+encodeURIComponent(execId)+'&limit=1');
+        if(existing && existing[0]){ execRec.regNo = existing[0].reg_no; execRec.createdAt = existing[0].created_at; }
+        else { execRec.regNo = await nextRegNo(await prefixForExec({level:'branch',branchId})); winnersCreated++; }
+        await SB.upsert('ndc_executives', execToRow(execRec));
       }
     }
-    await SB.update('ndc_branches','id=eq.'+encodeURIComponent(branchId),{election_status:'completed',updated_at:nowISO()});
-    const tieNote = ties.length? ' — tie (no winner recorded) for: '+ties.join(', ') : '';
-    await audit('UPDATE','branch',branchId,'Recorded election results for cycle '+branch.electionCycle+' ('+winnersCreated+' new executive(s))'+tieNote);
-    if(ties.length) toast('Results recorded — tie for '+ties.join(', ')+'; no winner set for those position(s)',true);
-    else toast('Results recorded');
-    render();
-  };
+  }
+  await SB.update('ndc_branches','id=eq.'+encodeURIComponent(branchId),{election_status:'completed',updated_at:nowISO()});
+  const tieNote = ties.length? ' — tie (no winner recorded) for: '+ties.join(', ') : '';
+  await audit('UPDATE','branch',branchId,'Recorded election results for cycle '+branch.electionCycle+' ('+winnersCreated+' new executive(s))'+tieNote);
+  if(ties.length) toast('Results recorded — tie for '+ties.join(', ')+'; no winner set for those position(s)',true);
+  else toast('Results recorded');
+  render();
+}
 
-  const newCycleBtn = $('[data-act=newCycle]');
-  if(newCycleBtn) newCycleBtn.onclick = async()=>{
-    const branch = await Data.get('branch:'+branchId);
-    const go = await confirmModal('Start a new election cycle?', 'This closes cycle '+branch.electionCycle+' and starts cycle '+(branch.electionCycle+1)+'. Existing results remain on record. Nominations should be reopened and re-reviewed for the new cycle.');
-    if(!go) return;
-    await SB.update('ndc_branches','id=eq.'+encodeURIComponent(branchId),{election_cycle:branch.electionCycle+1, election_status:'pending', nominations_open:false, updated_at:nowISO()});
-    await audit('UPDATE','branch',branchId,'Started election cycle '+(branch.electionCycle+1));
-    toast('New cycle started'); render();
-  };
-
-  const printBtn = $('[data-act=printReport]');
-  if(printBtn) printBtn.onclick = ()=> window.print();
+async function doNewCycle(){
+  const branchId = _electionBranchId; if(!branchId) return;
+  const branch = await Data.get('branch:'+branchId);
+  const go = await confirmModal('Start a new election cycle?', 'This closes cycle '+branch.electionCycle+' and starts cycle '+(branch.electionCycle+1)+'. Existing results remain on record. Nominations should be reopened and re-reviewed for the new cycle.');
+  if(!go) return;
+  await SB.update('ndc_branches','id=eq.'+encodeURIComponent(branchId),{election_cycle:branch.electionCycle+1, election_status:'pending', nominations_open:false, updated_at:nowISO()});
+  await audit('UPDATE','branch',branchId,'Started election cycle '+(branch.electionCycle+1));
+  toast('New cycle started'); render();
 }
 
 /* ============================================================
@@ -1744,13 +1747,8 @@ function groupedSelectField(id,label,groups,val,req){
 function wireExecForm(){
   const form=$('#execForm'); if(!form) return;
   const cam=$('#camIn'), gal=$('#galIn');
-  const take=$('[data-act=takePhoto]'); if(take) take.onclick=()=>cam.click();
-  const pick=$('[data-act=pickPhoto]'); if(pick) pick.onclick=()=>gal.click();
-  const onPick = async (file)=>{ if(!file) return; try{ const data=await compressImage(file); $('#photoData').value=data; $('#photoPrev').innerHTML=`<img src="${data}">`; $('#photoErr').classList.add('hidden'); }catch{ toast('Could not read that image',true); } };
-  if(cam) cam.onchange=e=>onPick(e.target.files[0]);
-  if(gal) gal.onchange=e=>onPick(e.target.files[0]);
-  const cancel=$('[data-act=cancel]'); if(cancel) cancel.onclick=()=>history.back();
-  const save=$('[data-act=saveExec]'); if(save) save.onclick=saveExec;
+  if(cam) cam.onchange=e=>onPickPhoto(e.target.files[0]);
+  if(gal) gal.onchange=e=>onPickPhoto(e.target.files[0]);
 }
 function fieldVal(id){ const el=$('#f_'+id); return el?el.value.trim():''; }
 function setBad(f,bad,msg){ const wrap=document.querySelector(`[data-f="${f}"]`); if(!wrap) return; wrap.classList.toggle('bad',bad); const err=wrap.querySelector('.err'); if(err){ err.classList.toggle('hidden',!bad); if(msg) err.textContent=msg; } }
@@ -2589,9 +2587,18 @@ async function onAction(e){
   if(act==='newWardIn') return orgFormModal('ward',null,el.dataset.con);
   if(act==='newChild') return orgFormModal(el.dataset.level,null,el.dataset.parent);
   if(act==='editOrg'){ const n=await Data.get(el.dataset.level+':'+el.dataset.id); return orgFormModal(el.dataset.level,n,null); }
-  if(act==='delOrg'){ const go=await confirmModal('Delete '+LVS[el.dataset.level]+'?','This also deletes everything beneath it (branches, units, and their executives).'); if(go){ await cascadeDelete(el.dataset.level,el.dataset.id); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
+  if(act==='delOrg'){ const go=await confirmModal('Delete '+LVS[el.dataset.level]+'?','This also deletes everything beneath it (branches and their executives).'); if(go){ await cascadeDelete(el.dataset.level,el.dataset.id); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
   if(act==='delExec'){ const go=await confirmModal('Delete executive?','This permanently removes '+el.dataset.name+'.'); if(go){ await SB.delete('ndc_executives','id=eq.'+el.dataset.id); await audit('DELETE','executive',el.dataset.id,'Deleted '+el.dataset.name); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
   if(act==='exportReport') return exportExecsCSV();
+  if(act==='saveExec') return saveExec();
+  if(act==='saveRegMember') return saveRegMember();
+  if(act==='delRegMember') return delRegMember();
+  if(act==='cancel') return history.back();
+  if(act==='takePhoto'){ const c=$('#camIn'); if(c) c.click(); return; }
+  if(act==='pickPhoto'){ const g=$('#galIn'); if(g) g.click(); return; }
+  if(act==='printReport') return window.print();
+  if(act==='recordResults') return doRecordResults();
+  if(act==='newCycle') return doNewCycle();
 }
 async function cascadeDelete(type,id){
   if(type==='ward'){
