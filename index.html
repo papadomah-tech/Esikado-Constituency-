@@ -2548,16 +2548,18 @@ async function orgFormModal(type, existing, parentId){
   const name=$('#of_name').value.trim(); if(!name){ toast('Name is required',true); return; }
   const id = existing? existing.id : uid();
   const rec = Object.assign({}, existing||{}, {id, type, name, updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO()});
-  if(type==='branch'){ rec.wardId=$('#of_parent').value; rec.code=$('#of_code').value.trim(); }
-  if(type==='unit'){ rec.branchId=$('#of_parent').value; rec.stationCode=$('#of_station').value.trim(); }
-  if(type==='ward'){ rec.constituencyId = parentId || (existing&&existing.constituencyId); rec.code=$('#of_code').value.trim(); }
+  if(type==='branch'){ rec.wardId=$('#of_parent')?$('#of_parent').value:''; rec.code=$('#of_code')?$('#of_code').value.trim():''; }
+  if(type==='unit'){ rec.branchId=$('#of_parent')?$('#of_parent').value:''; rec.stationCode=$('#of_station')?$('#of_station').value.trim():''; }
+  if(type==='ward'){ rec.constituencyId = parentId || (existing&&existing.constituencyId); rec.code=$('#of_code')?$('#of_code').value.trim():''; }
   r.el.remove();
-  if(type==='ward') await SB.upsert('ndc_wards', wardToRow(rec));
-  else if(type==='branch') await SB.upsert('ndc_branches', branchToRow(rec));
-  else if(type==='unit') await SB.upsert('ndc_units', unitToRow(rec));
-  await audit(existing?'UPDATE':'CREATE',type,id,(existing?'Updated ':'Created ')+LVS[type]+' '+name);
-  toast(existing?'Saved':LVS[type]+' added');
-  if(!existing && type!=='ward'){ render(); } else { location.hash = '#/'+type+'/'+id; render(); }
+  try{
+    if(type==='ward') await SB.upsert('ndc_wards', wardToRow(rec));
+    else if(type==='branch') await SB.upsert('ndc_branches', branchToRow(rec));
+    else if(type==='unit') await SB.upsert('ndc_units', unitToRow(rec));
+    await audit(existing?'UPDATE':'CREATE',type,id,(existing?'Updated ':'Created ')+LVS[type]+' '+name);
+    toast(existing?'Saved':LVS[type]+' added');
+    location.hash = '#/'+type+'/'+id; render();
+  }catch(err){ toast('Save failed: '+err.message, true); }
 }
 
 /* ============================================================
