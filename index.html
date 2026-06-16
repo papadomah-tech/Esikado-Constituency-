@@ -209,6 +209,13 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 .reg-print-table th{background:var(--green-soft);color:var(--green-dark);font-weight:700;padding:5px 6px;text-align:left;border:1px solid #ccc}
 .reg-print-table td{padding:4px 6px;border:1px solid #ddd;vertical-align:top}
 .reg-print-table tr:nth-child(even) td{background:#f9f9f9}
+/* When printing album, show the album block and hide the table */
+@media print{
+  #regPrintAlbum.reg-print-active{display:block !important}
+  #regPrintTable.reg-print-hide{display:none !important}
+  #regPrintAlbum .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
+  #regPrintAlbum .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important}
+}
 
 @media print{
   @page{margin:12mm}
@@ -1322,7 +1329,7 @@ async function viewBranchRegister(branchId){
     <input id="regSearch" placeholder="Search name or registry number…" style="flex:1;min-width:160px">
     <select id="regGender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
     <select id="regSort"><option value="reg">Sort: Registry No.</option><option value="name">Sort: Name</option></select>
-    <button class="btn sm" data-act="printRegister">🖨️ Print register</button>
+    <button class="btn sm" id="regPrintBtn">🖨️ Print register</button>
   </div>
 
   <!-- List view -->
@@ -1360,27 +1367,65 @@ async function viewBranchRegister(branchId){
       </tbody>
     </table>
     <div class="album-print-foot">${esc(PARTY_SLOGAN)}</div>
+  </div>
+
+  <!-- Print-only album grid (populated dynamically when printing from album tab) -->
+  <div class="print-only" id="regPrintAlbum">
+    <div class="album-print-head">
+      <img src="${LOGO_FULL}" alt="NDC">
+      <div class="pt">${esc(branch.name)} — Branch Member Photo Album</div>
+      <div class="ps">${members.length} registered member(s) • Printed ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div class="pm">${esc(PARTY_MOTTO)}</div>
+    </div>
+    <div class="album-grid" id="regPrintAlbumGrid"></div>
+    <div class="album-print-foot">${esc(PARTY_SLOGAN)}</div>
   </div>`;
 }
 function wireBranchRegister(branchId){
+  let activeTab = 'list';
+
   // Tab switching
   document.querySelectorAll('#regTabs .tab').forEach(tab=>{
     tab.onclick=()=>{
       document.querySelectorAll('#regTabs .tab').forEach(t=>t.classList.remove('active'));
       tab.classList.add('active');
-      const view = tab.dataset.tab;
-      $('#regListView').style.display = view==='list' ? '' : 'none';
-      $('#regAlbumView').style.display = view==='album' ? '' : 'none';
-      if(view==='album') buildRegAlbum(branchId);
+      activeTab = tab.dataset.tab;
+      $('#regListView').style.display = activeTab==='list' ? '' : 'none';
+      $('#regAlbumView').style.display = activeTab==='album' ? '' : 'none';
+      // Update print button label
+      const pb=$('#regPrintBtn');
+      if(pb) pb.textContent = activeTab==='album' ? '🖨️ Print album' : '🖨️ Print register';
+      if(activeTab==='album') buildRegAlbum(branchId);
       filterRegList();
     };
   });
+
+  // Override printRegister in onAction to be tab-aware
+  const pb=$('#regPrintBtn');
+  if(pb) pb.onclick=(e)=>{
+    e.stopPropagation();
+    if(activeTab==='album'){
+      // Populate the print album grid from the screen album grid
+      const screenGrid=$('#regAlbumGrid'), printGrid=$('#regPrintAlbumGrid');
+      if(screenGrid&&printGrid) printGrid.innerHTML = screenGrid.innerHTML;
+      // Show album print, hide register table
+      $('#regPrintAlbum').classList.add('reg-print-active');
+      $('#regPrintTable').classList.add('reg-print-hide');
+      window.print();
+      // Restore after print
+      setTimeout(()=>{ $('#regPrintAlbum').classList.remove('reg-print-active'); $('#regPrintTable').classList.remove('reg-print-hide'); },500);
+    } else {
+      $('#regPrintAlbum').style.display='none';
+      $('#regPrintTable').style.display='';
+      window.print();
+    }
+  };
 
   // Search + gender filter
   const search=$('#regSearch'), gender=$('#regGender'), sort=$('#regSort');
   if(search) search.oninput = filterRegList;
   if(gender) gender.onchange = filterRegList;
-  if(sort) sort.onchange = ()=>{ filterRegList(); buildRegAlbum(branchId); };
+  if(sort) sort.onchange = ()=>{ filterRegList(); if(activeTab==='album') buildRegAlbum(branchId); };
 }
 
 function filterRegList(){
@@ -2731,7 +2776,6 @@ async function onAction(e){
   if(act==='takePhoto'){ const c=$('#camIn'); if(c) c.click(); return; }
   if(act==='pickPhoto'){ const g=$('#galIn'); if(g) g.click(); return; }
   if(act==='printReport') return window.print();
-  if(act==='printRegister') return window.print();
   if(act==='recordResults') return doRecordResults();
   if(act==='newCycle') return doNewCycle();
 }
