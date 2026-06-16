@@ -310,7 +310,15 @@ function wardToRow(w){
   return {id:w.id, name:w.name, constituency_id:w.constituencyId, code:w.code||null, created_at:w.createdAt||new Date().toISOString(), updated_at:w.updatedAt||new Date().toISOString(), created_by:w.createdBy||null};
 }
 function rowToWard(r){ return {id:r.id, name:r.name, constituencyId:r.constituency_id, code:r.code, type:'ward', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
-function branchToRow(b){ return {id:b.id, name:b.name, ward_id:b.wardId, nominations_open:b.nominationsOpen||false, election_cycle:b.electionCycle||1, election_status:b.electionStatus||'pending', created_at:b.createdAt||new Date().toISOString(), updated_at:b.updatedAt||new Date().toISOString(), created_by:b.createdBy||null}; }
+function branchToRow(b){
+  const row = {id:b.id, name:b.name, ward_id:b.wardId, nominations_open:b.nominationsOpen||false, created_at:b.createdAt||new Date().toISOString(), updated_at:b.updatedAt||new Date().toISOString(), created_by:b.createdBy||null};
+  // election_cycle / election_status were added in the v5.1 migration.
+  // Only include them if we have values to set, so the upsert doesn't fail
+  // on databases that haven't yet had the migration applied.
+  if(b.electionCycle!==undefined) row.election_cycle = b.electionCycle||1;
+  if(b.electionStatus!==undefined) row.election_status = b.electionStatus||'pending';
+  return row;
+}
 function rowToBranch(r){ return {id:r.id, name:r.name, wardId:r.ward_id, nominationsOpen:r.nominations_open||false, electionCycle:r.election_cycle||1, electionStatus:r.election_status||'pending', type:'branch', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function unitToRow(u){ return {id:u.id, name:u.name, branch_id:u.branchId, created_at:u.createdAt||new Date().toISOString(), updated_at:u.updatedAt||new Date().toISOString(), created_by:u.createdBy||null}; }
 function rowToUnit(r){ return {id:r.id, name:r.name, branchId:r.branch_id, type:'unit', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
