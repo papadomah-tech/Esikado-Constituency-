@@ -311,7 +311,7 @@ function wardToRow(w){
 }
 function rowToWard(r){ return {id:r.id, name:r.name, constituencyId:r.constituency_id, code:r.code, type:'ward', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function branchToRow(b){
-  const row = {id:b.id, name:b.name, ward_id:b.wardId, nominations_open:b.nominationsOpen||false, created_at:b.createdAt||new Date().toISOString(), updated_at:b.updatedAt||new Date().toISOString(), created_by:b.createdBy||null};
+  const row = {id:b.id, name:b.name, code:b.code||null, ward_id:b.wardId, nominations_open:b.nominationsOpen||false, created_at:b.createdAt||new Date().toISOString(), updated_at:b.updatedAt||new Date().toISOString(), created_by:b.createdBy||null};
   // election_cycle / election_status were added in the v5.1 migration.
   // Only include them if we have values to set, so the upsert doesn't fail
   // on databases that haven't yet had the migration applied.
@@ -319,7 +319,7 @@ function branchToRow(b){
   if(b.electionStatus!==undefined) row.election_status = b.electionStatus||'pending';
   return row;
 }
-function rowToBranch(r){ return {id:r.id, name:r.name, wardId:r.ward_id, nominationsOpen:r.nominations_open||false, electionCycle:r.election_cycle||1, electionStatus:r.election_status||'pending', type:'branch', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
+function rowToBranch(r){ return {id:r.id, name:r.name, code:r.code||'', wardId:r.ward_id, nominationsOpen:r.nominations_open||false, electionCycle:r.election_cycle||1, electionStatus:r.election_status||'pending', type:'branch', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function unitToRow(u){ return {id:u.id, name:u.name, branch_id:u.branchId, created_at:u.createdAt||new Date().toISOString(), updated_at:u.updatedAt||new Date().toISOString(), created_by:u.createdBy||null}; }
 function rowToUnit(r){ return {id:r.id, name:r.name, branchId:r.branch_id, type:'unit', createdAt:r.created_at, updatedAt:r.updated_at, createdBy:r.created_by}; }
 function regMemberToRow(m){ return {id:m.id, branch_id:m.branchId, registry_no:m.registryNo, full_name:m.fullName, member_id:m.memberId||null, phone:m.phone||null, email:m.email||null, gender:m.gender||null, dob:m.dob||null, occupation:m.occupation||null, address:m.address||null, background:m.background||null, photo:m.photo||null, created_at:m.createdAt||new Date().toISOString(), updated_at:new Date().toISOString(), created_by:m.createdBy||null}; }
@@ -501,9 +501,17 @@ async function prefixForExec(rec){
 // distinct format (REG-####) from executive registration numbers, so the
 // two cannot be confused when verifying nominations.
 async function nextBranchRegistryNo(branchId){
-  // Use a short prefix: 'BR-' plus the first 6 chars of the branch ID.
-  // Gives compact registry numbers like BR-mqfy0r-0001.
-  return await nextRegNo('BR-'+branchId.slice(0,6));
+  // Use the branch's own code as the registry number prefix, e.g. "AV" → "AV0001".
+  // Falls back to first 4 letters of branch name if code is not set.
+  const branch = await Data.get('branch:'+branchId);
+  const prefix = (branch&&branch.code ? branch.code.toUpperCase() :
+    (branch&&branch.name ? branch.name.replace(/[^a-zA-Z0-9]/g,'').slice(0,4).toUpperCase() : 'BR'));
+  // Scope the counter per branch so two branches with the same code stay separate.
+  const seqKey = prefix+'-'+branchId.slice(0,6);
+  const n = await nextRegNo(seqKey);
+  // Rebuild in AV0001 format (prefix + 4-digit number, no dash).
+  const num = n.split('-').pop();
+  return prefix+num;
 }
 // No migration needed — Supabase is the single source of truth from first use.
 async function migrateToNational(){ /* no-op: Supabase schema handles structure */ }
@@ -2547,7 +2555,7 @@ async function orgFormModal(type, existing, parentId){
   if(type==='ward'){ const conId = parentId || (existing&&existing.constituencyId); const c=g.cMap[conId]; extra=`<div class="field"><label>Constituency</label><input value="${esc(c?c.name:conId||'')}" readonly style="background:var(--green-soft)"></div>`; }
   if(type==='branch'){ extra=`<div class="field"><label>Parent ward <span class="req">*</span></label><select id="of_parent">${wards.map(w=>`<option value="${w.id}" ${parentId===w.id||(existing&&existing.wardId===w.id)?'selected':''}>${esc(w.name)} — ${esc((g.cMap[w.constituencyId]||{}).code||'')}</option>`).join('')}</select></div>`; }
   if(type==='unit'){ extra=`<div class="field"><label>Parent branch <span class="req">*</span></label><select id="of_parent">${branches.map(b=>`<option value="${b.id}" ${parentId===b.id||(existing&&existing.branchId===b.id)?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`; }
-  const codeLabel = type==='unit'?'Polling station code':'Code (optional)';
+  const codeLabel = type==='branch' ? 'Branch code <span class="req">*</span> (used as registry number prefix, e.g. AV)' : type==='unit' ? 'Polling station code' : 'Code (optional)';
   const codeId = type==='unit'?'of_station':'of_code';
   const body=`
     <div class="field"><label>${LV[type]} name <span class="req">*</span></label><input id="of_name" value="${existing?esc(existing.name):''}"></div>
@@ -2556,9 +2564,13 @@ async function orgFormModal(type, existing, parentId){
   const r=await modalForm((existing?'Edit ':'Add ')+LVS[type], body);
   if(!r.ok) return;
   const name=$('#of_name').value.trim(); if(!name){ toast('Name is required',true); return; }
+  if(type==='branch'){
+    const code = $('#of_code')?$('#of_code').value.trim():'';
+    if(!code){ toast('Branch code is required',true); return; }
+  }
   const id = existing? existing.id : uid();
   const rec = Object.assign({}, existing||{}, {id, type, name, updatedAt:nowISO(), createdAt:(existing&&existing.createdAt)||nowISO()});
-  if(type==='branch'){ rec.wardId=$('#of_parent')?$('#of_parent').value:''; rec.code=$('#of_code')?$('#of_code').value.trim():''; }
+  if(type==='branch'){ rec.wardId=$('#of_parent')?$('#of_parent').value:''; rec.code=$('#of_code')?$('#of_code').value.trim().toUpperCase():''; }
   if(type==='unit'){ rec.branchId=$('#of_parent')?$('#of_parent').value:''; rec.stationCode=$('#of_station')?$('#of_station').value.trim():''; }
   if(type==='ward'){ rec.constituencyId = parentId || (existing&&existing.constituencyId); rec.code=$('#of_code')?$('#of_code').value.trim():''; }
   r.el.remove();

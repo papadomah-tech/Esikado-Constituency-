@@ -99,6 +99,7 @@ create table if not exists ndc_wards (
 create table if not exists ndc_branches (
   id          text primary key,
   name        text not null,
+  code        text,
   ward_id     text not null references ndc_wards(id) on delete cascade,
   nominations_open boolean not null default false,
   election_cycle  integer not null default 1,
@@ -433,5 +434,11 @@ alter table ndc_election_results enable row level security;
 drop policy if exists "anon_all" on ndc_election_results;
 create policy "anon_all" on ndc_election_results for all to anon using (true) with check (true);
 create index if not exists idx_election_results_branch on ndc_election_results(branch_id, cycle);
+
+-- -----------------------------------------------------------------
+-- Migration: add branch code column (used as registry number prefix).
+-- Safe to re-run.
+-- -----------------------------------------------------------------
+alter table ndc_branches add column if not exists code text;
 
 notify pgrst, 'reload schema';
