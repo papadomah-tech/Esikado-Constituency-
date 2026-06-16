@@ -386,22 +386,22 @@ async function audit(action, entityType, entityId, detail){
 
 /* ---------------- Default positions slate ---------------- */
 const DEFAULT_POSITIONS = [
-  {title:'Chairman', levels:['region','constituency','ward']},
-  {title:'First Vice Chairman', levels:['region','constituency']},
-  {title:'Second Vice Chairman', levels:['region','constituency']},
+  {title:'Chairman', levels:['region','ward']},
+  {title:'First Vice Chairman', levels:['region']},
+  {title:'Second Vice Chairman', levels:['region']},
   {title:'Vice Chairman', levels:['ward']},
-  {title:'Secretary', levels:['region','constituency','ward']},
-  {title:'Deputy Secretary', levels:['region','constituency','ward']},
-  {title:'Treasurer', levels:['region','constituency','ward']},
-  {title:'Deputy Treasurer', levels:['region','constituency']},
-  {title:'Organizer', levels:['region','constituency','ward']},
-  {title:'Deputy Organizer', levels:['region','constituency','ward']},
-  {title:"Women's Organizer", levels:['region','constituency','ward']},
-  {title:"Deputy Women's Organizer", levels:['region','constituency']},
-  {title:'Youth Organizer', levels:['region','constituency','ward']},
-  {title:'Deputy Youth Organizer', levels:['region','constituency']},
-  {title:'Communications Officer', levels:['region','constituency','ward']},
-  {title:'Nasara Coordinator', levels:['region','constituency','ward']},
+  {title:'Secretary', levels:['region','ward']},
+  {title:'Deputy Secretary', levels:['region','ward']},
+  {title:'Treasurer', levels:['region','ward']},
+  {title:'Deputy Treasurer', levels:['region']},
+  {title:'Organizer', levels:['region','ward']},
+  {title:'Deputy Organizer', levels:['region','ward']},
+  {title:"Women's Organizer", levels:['region','ward']},
+  {title:"Deputy Women's Organizer", levels:['region']},
+  {title:'Youth Organizer', levels:['region','ward']},
+  {title:'Deputy Youth Organizer', levels:['region']},
+  {title:'Communications Officer', levels:['region','ward']},
+  {title:'Nasara Coordinator', levels:['region','ward']},
   {title:'Zonal Coordinator', levels:['ward']},
   // Branch-level executive positions
   {title:'Chairman', levels:['branch']},
@@ -788,8 +788,8 @@ function viewLogin(){
         <div class="t2">Party Executive Registry</div>
         <div class="t3">${esc(PARTY_MOTTO)}</div>
       </div>
-      <div class="field"><label>Username</label><input id="lu" autocomplete="username" placeholder="Username" /></div>
-      <div class="field"><label>Password</label><input id="lp" type="password" autocomplete="current-password" placeholder="••••••••" /></div>
+      <div class="field"><label>Username</label><input id="lu" autocomplete="off" placeholder="Username" /></div>
+      <div class="field"><label>Password</label><input id="lp" type="password" autocomplete="off" placeholder="••••••••" /></div>
       <button class="btn primary block" data-act="dologin">Sign in</button>
       <p style="text-align:center;margin-top:14px"><a href="#/nominate" class="small">📝 File a nomination for a branch position</a></p>
     </div>
@@ -1016,7 +1016,7 @@ async function viewDashboard(){
   <div class="grid-stat">
     <div class="stat g"><div class="n">${execs.length}</div><div class="l">Executives</div></div>
     <div class="stat k"><div class="n">${scoped?wards.length:g.regions.length}</div><div class="l">${scoped?'Zonal Areas':'Regions'}</div></div>
-    <div class="stat y"><div class="n">${scoped?branches.length:g.cons.length}</div><div class="l">${scoped?'Branches':'Constituencies'}</div></div>
+    <div class="stat y"><div class="n">${scoped?branches.length:wards.length}</div><div class="l">${scoped?'Branches':'Zonal Areas'}</div></div>
     <div class="stat r"><div class="n">${scoped?new Set(execs.filter(e=>e.level==='branch').map(e=>e.branchId)).size:wards.length}</div><div class="l">${scoped?'Branches with execs':'Zonal Areas'}</div></div>
   </div>
 
@@ -1054,10 +1054,10 @@ function covRow(label, n, total){
 // Load the whole org graph once with quick lookup maps + a constituency resolver.
 async function loadGraph(){
   const [regions,cons,wards,branches,units,execsAll]=await Promise.all([Data.regions(),Data.constituencies(),Data.wards(),Data.branches(),Data.units(),Data.execs()]);
-  // The Unit level has been retired from the active structure (v5.0). Any
-  // pre-existing unit-level executive records remain in the database for
-  // historical integrity but are excluded from all views going forward.
-  const execs = execsAll.filter(e=>e.level!=='unit');
+  // The Unit level and Constituency level have been retired from the active
+  // structure. Any pre-existing records remain in the database for historical
+  // integrity but are excluded from all views going forward.
+  const execs = execsAll.filter(e=>e.level!=='unit' && e.level!=='constituency');
   const rMap={},cMap={},wMap={},bMap={},uMap={};
   regions.forEach(r=>rMap[r.id]=r);
   cons.forEach(c=>cMap[c.id]=c); wards.forEach(w=>wMap[w.id]=w); branches.forEach(b=>bMap[b.id]=b); units.forEach(u=>uMap[u.id]=u);
@@ -1119,7 +1119,7 @@ async function viewRegionDetail(regionId){
   <div class="list">${cons.map(c=>`
     <div class="item org" data-link="#/constituency/${c.id}">
       <div class="icoo w">🏛️</div>
-      <div class="body"><div class="nm">${esc(c.name)}</div><div class="mt">${wardCount(c.id)} ward(s) • ${conExec[c.id]||0} executive(s) • ${esc(c.code)}</div></div>
+      <div class="body"><div class="nm">${esc(c.name)}</div><div class="mt">${wardCount(c.id)} zonal area(s) • ${esc(c.code)}</div></div>
       <div class="chev">›</div>
     </div>`).join('')}</div>`;
 }
@@ -1128,12 +1128,8 @@ async function viewConstituencyDetail(id){
   const con = await Data.get('con:'+id);
   if(!con) return emptyState('🚫','Not found','That constituency does not exist.');
   if(!inScope(id)) return denyView();
-  const positions = await Data.positions();
   const g = await loadGraph();
   const region = g.rMap[con.regionId];
-  const ownExecs = g.execs.filter(e=> e.level==='constituency' && e.constituencyId===id);
-  const slate = posForLevel(positions, 'constituency');
-  const filled = new Set(ownExecs.map(e=>e.position));
   const wards = g.wards.filter(w=>w.constituencyId===id).sort((a,b)=>a.name.localeCompare(b.name));
   const wardExec = wid=> g.execs.filter(e=>e.level==='ward'&&e.wardId===wid).length;
   const wardBranch = wid=> g.branches.filter(b=>b.wardId===wid).length;
@@ -1145,16 +1141,6 @@ async function viewConstituencyDetail(id){
   return `
   ${crumb}
   <div class="section-head"><h2>${esc(con.name)}</h2><span class="badge">${esc(con.code)}</span><span class="badge k">Constituency</span>${isNational()?`<span class="badge y">${esc(region?region.name:con.regionId)}</span>`:''}</div>
-
-  <div class="card pad">
-    <div class="row" style="margin-bottom:8px"><h3 style="font-size:15px">Constituency executives</h3><span class="badge k">${ownExecs.length}</span><span class="spacer"></span>
-      ${can('create')?`<button class="btn primary sm" data-link="#/exec/new?level=constituency&parent=${id}">＋ Add</button>`:''}
-    </div>
-    <div class="small muted" style="margin-bottom:8px">Positions filled: ${filled.size}/${slate.length}
-      <div class="pip-row">${slate.map(p=>`<span class="pip ${filled.has(p)?'on':''}" title="${esc(p)}${filled.has(p)?' — filled':' — vacant'}"></span>`).join('')}</div>
-    </div>
-    ${ownExecs.length? `<div class="list" style="margin-top:6px">`+ownExecs.map(execItem).join('')+`</div>` : '<p class="muted small" style="margin:6px 0 0">No constituency executives registered yet.</p>'}
-  </div>
 
   <div class="card pad" style="margin-top:14px">
     <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Zonal/Electoral Areas</h3><span class="badge k">${wards.length}</span><span class="spacer"></span>
@@ -2059,9 +2045,10 @@ async function viewExecForm(execId, q){
   const positions = await Data.positions();
   let e = execId? await Data.get('exec:'+execId) : null;
   const level = e? e.level : (q.level||'ward');
-  // Branch executives are no longer registered manually — they are created
-  // automatically from election results (see Branch Register / Elections).
-  if(!e && level==='branch') return emptyState('🚫','Not available','Branch executives are determined by election results. Compile the Branch Register, open nominations, then record election results.');
+  // Constituency and Branch executives are not registered manually.
+  if(!e && (level==='constituency' || level==='branch')) return emptyState('🚫','Not available', level==='branch'
+    ? 'Branch executives are determined by election results. Compile the Branch Register, open nominations, then record election results.'
+    : 'Constituency-level executives are not tracked in this registry. Executives are registered at Region and Zonal/Electoral Area level.');
   const parentId = e? e[level+'Id'] : (q.parent||'');
   const slate = posForLevel(positions, level);
 
@@ -2277,7 +2264,7 @@ async function viewSearch(q){
   <div class="filters">
     ${regFilter}
     ${conFilter}
-    <select id="flevel"><option value="">All levels</option><option value="region">Region</option><option value="constituency">Constituency</option><option value="ward">Zonal/Electoral Area</option><option value="branch">Branch</option></select>
+    <select id="flevel"><option value="">All levels</option><option value="region">Region</option><option value="ward">Zonal/Electoral Area</option><option value="branch">Branch</option></select>
     <select id="fgender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
     <select id="fsort"><option value="reg">Sort: Reg. number</option><option value="name">Sort: Name</option><option value="position">Sort: Position</option><option value="recent">Sort: Recent</option></select>
   </div>
@@ -2334,7 +2321,7 @@ async function viewReports(){
   const branches = scoped? g.branches.filter(b=>(g.wMap[b.wardId]||{}).constituencyId===scoped) : g.branches;
   const byLevel = l=>execs.filter(e=>e.level===l);
   const genderOf = arr=>{const gg={male:0,female:0};arr.forEach(e=>gg[e.gender]=(gg[e.gender]||0)+1);return gg;};
-  const levels = scoped? ['constituency','ward','branch'] : ['region','constituency','ward','branch'];
+  const levels = scoped? ['ward','branch'] : ['region','ward','branch'];
   const lvRow = (l)=>{ const arr=byLevel(l); const gg=genderOf(arr); const t=arr.length||1;
     return `<div class="row small" style="padding:8px 0;border-bottom:1px solid var(--line)">
       <span style="font-weight:700;width:88px">${LVS[l]}</span>
@@ -2365,10 +2352,9 @@ async function viewReports(){
     <div class="kv">
       <dt>Total executives</dt><dd>${execs.length}</dd>
       ${!scoped?`<dt>Region level</dt><dd>${byLevel('region').length}</dd>`:''}
-      <dt>Constituency level</dt><dd>${byLevel('constituency').length}</dd>
       <dt>${LVS.ward} level</dt><dd>${byLevel('ward').length}</dd>
       <dt>Branch level</dt><dd>${byLevel('branch').length}</dd>
-      <dt>${scoped?'Zonal Areas / Branches':'Regions / Constituencies / Zonal Areas / Branches'}</dt><dd>${scoped?'':(g.regions.length+' / '+g.cons.length+' / ')}${wards.length} / ${branches.length}</dd>
+      <dt>${scoped?'Zonal Areas / Branches':'Regions / Zonal Areas / Branches'}</dt><dd>${scoped?'':(g.regions.length+' / ')}${wards.length} / ${branches.length}</dd>
     </div>
   </div>
 
@@ -2409,7 +2395,7 @@ async function viewAlbum(q){
     const groups = regions.map(r=>({label:r.name, opts:g.cons.filter(c=>c.regionId===r.id).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>({v:'con:'+c.id,t:c.name}))}));
     conOpts = `<select id="albCon"><option value="">All constituencies</option>${groups.map(grp=>`<optgroup label="${esc(grp.label)}">${grp.opts.map(o=>`<option value="${esc(o.v)}" ${q.con===o.v?'selected':''}>${esc(o.t)}</option>`).join('')}</optgroup>`).join('')}</select>`;
   }
-  const levelOpts = `<option value="">All levels</option>`+(scoped?['constituency','ward','branch']:['region','constituency','ward','branch']).map(l=>`<option value="${l}" ${q.level===l?'selected':''}>${LVS[l]}</option>`).join('');
+  const levelOpts = `<option value="">All levels</option>`+(scoped?['ward','branch']:['region','ward','branch']).map(l=>`<option value="${l}" ${q.level===l?'selected':''}>${LVS[l]}</option>`).join('');
   const scopeName = scoped? ((g.cMap[scoped]||{}).name||'') : NATION_NAME;
 
   return `
@@ -2598,7 +2584,7 @@ async function importCSV(file){
     const row=rows[r]; if(!row.length||!(row[idx.fullName]||'').trim()) continue;
     const get=(k)=>(idx[k]>=0?(row[idx[k]]||'').trim():'');
     const level=get('level').toLowerCase();
-    if(!['region','constituency','ward'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level (branch executives are determined by election results and cannot be imported)`); continue; }
+    if(!['region','ward'].includes(level)){ fail++; errs.push(`Row ${r+1}: invalid level (executives are registered at region and zonal/electoral area level only)`); continue; }
     if(!get('fullName')||!get('memberId')||!get('position')||!get('gender')||!get('phone')){ fail++; errs.push(`Row ${r+1}: missing required field`); continue; }
     const regionIdHint = findRegion(get('region'));
     if(level==='region'){

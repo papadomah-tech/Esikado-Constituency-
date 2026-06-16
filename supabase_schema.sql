@@ -43,22 +43,22 @@ create table if not exists ndc_settings (
 
 insert into ndc_settings (key, value)
 values ('positions', '[
-  {"title":"Chairman","levels":["region","constituency","ward"]},
-  {"title":"First Vice Chairman","levels":["region","constituency"]},
-  {"title":"Second Vice Chairman","levels":["region","constituency"]},
+  {"title":"Chairman","levels":["region","ward"]},
+  {"title":"First Vice Chairman","levels":["region"]},
+  {"title":"Second Vice Chairman","levels":["region"]},
   {"title":"Vice Chairman","levels":["ward"]},
-  {"title":"Secretary","levels":["region","constituency","ward"]},
-  {"title":"Deputy Secretary","levels":["region","constituency","ward"]},
-  {"title":"Treasurer","levels":["region","constituency","ward"]},
-  {"title":"Deputy Treasurer","levels":["region","constituency"]},
-  {"title":"Organizer","levels":["region","constituency","ward"]},
-  {"title":"Deputy Organizer","levels":["region","constituency","ward"]},
-  {"title":"Women''s Organizer","levels":["region","constituency","ward"]},
-  {"title":"Deputy Women''s Organizer","levels":["region","constituency"]},
-  {"title":"Youth Organizer","levels":["region","constituency","ward"]},
-  {"title":"Deputy Youth Organizer","levels":["region","constituency"]},
-  {"title":"Communications Officer","levels":["region","constituency","ward"]},
-  {"title":"Nasara Coordinator","levels":["region","constituency","ward"]},
+  {"title":"Secretary","levels":["region","ward"]},
+  {"title":"Deputy Secretary","levels":["region","ward"]},
+  {"title":"Treasurer","levels":["region","ward"]},
+  {"title":"Deputy Treasurer","levels":["region"]},
+  {"title":"Organizer","levels":["region","ward"]},
+  {"title":"Deputy Organizer","levels":["region","ward"]},
+  {"title":"Women''s Organizer","levels":["region","ward"]},
+  {"title":"Deputy Women''s Organizer","levels":["region"]},
+  {"title":"Youth Organizer","levels":["region","ward"]},
+  {"title":"Deputy Youth Organizer","levels":["region"]},
+  {"title":"Communications Officer","levels":["region","ward"]},
+  {"title":"Nasara Coordinator","levels":["region","ward"]},
   {"title":"Zonal Coordinator","levels":["ward"]},
   {"title":"Chairman","levels":["branch"]},
   {"title":"Secretary","levels":["branch"]},
@@ -314,22 +314,22 @@ alter table ndc_users add column if not exists created_by text;
 -- previous positions customisation with the standard slate below.
 -- -----------------------------------------------------------------
 update ndc_settings set value = '[
-  {"title":"Chairman","levels":["region","constituency","ward"]},
-  {"title":"First Vice Chairman","levels":["region","constituency"]},
-  {"title":"Second Vice Chairman","levels":["region","constituency"]},
+  {"title":"Chairman","levels":["region","ward"]},
+  {"title":"First Vice Chairman","levels":["region"]},
+  {"title":"Second Vice Chairman","levels":["region"]},
   {"title":"Vice Chairman","levels":["ward"]},
-  {"title":"Secretary","levels":["region","constituency","ward"]},
-  {"title":"Deputy Secretary","levels":["region","constituency","ward"]},
-  {"title":"Treasurer","levels":["region","constituency","ward"]},
-  {"title":"Deputy Treasurer","levels":["region","constituency"]},
-  {"title":"Organizer","levels":["region","constituency","ward"]},
-  {"title":"Deputy Organizer","levels":["region","constituency","ward"]},
-  {"title":"Women''s Organizer","levels":["region","constituency","ward"]},
-  {"title":"Deputy Women''s Organizer","levels":["region","constituency"]},
-  {"title":"Youth Organizer","levels":["region","constituency","ward"]},
-  {"title":"Deputy Youth Organizer","levels":["region","constituency"]},
-  {"title":"Communications Officer","levels":["region","constituency","ward"]},
-  {"title":"Nasara Coordinator","levels":["region","constituency","ward"]},
+  {"title":"Secretary","levels":["region","ward"]},
+  {"title":"Deputy Secretary","levels":["region","ward"]},
+  {"title":"Treasurer","levels":["region","ward"]},
+  {"title":"Deputy Treasurer","levels":["region"]},
+  {"title":"Organizer","levels":["region","ward"]},
+  {"title":"Deputy Organizer","levels":["region","ward"]},
+  {"title":"Women''s Organizer","levels":["region","ward"]},
+  {"title":"Deputy Women''s Organizer","levels":["region"]},
+  {"title":"Youth Organizer","levels":["region","ward"]},
+  {"title":"Deputy Youth Organizer","levels":["region"]},
+  {"title":"Communications Officer","levels":["region","ward"]},
+  {"title":"Nasara Coordinator","levels":["region","ward"]},
   {"title":"Zonal Coordinator","levels":["ward"]},
   {"title":"Chairman","levels":["branch"]},
   {"title":"Secretary","levels":["branch"]},
@@ -440,5 +440,41 @@ create index if not exists idx_election_results_branch on ndc_election_results(b
 -- Safe to re-run.
 -- -----------------------------------------------------------------
 alter table ndc_branches add column if not exists code text;
+
+-- -----------------------------------------------------------------
+-- Migration: remove constituency level from positions slate (v5.2).
+-- Executives are now tracked at Region and Zonal/Electoral Area
+-- level only. Existing constituency-level executive records remain
+-- in the database but are excluded from all views.
+-- -----------------------------------------------------------------
+update ndc_settings set value = '[
+  {"title":"Chairman","levels":["region","ward"]},
+  {"title":"First Vice Chairman","levels":["region"]},
+  {"title":"Second Vice Chairman","levels":["region"]},
+  {"title":"Vice Chairman","levels":["ward"]},
+  {"title":"Secretary","levels":["region","ward"]},
+  {"title":"Deputy Secretary","levels":["region","ward"]},
+  {"title":"Treasurer","levels":["region","ward"]},
+  {"title":"Deputy Treasurer","levels":["region"]},
+  {"title":"Organizer","levels":["region","ward"]},
+  {"title":"Deputy Organizer","levels":["region","ward"]},
+  {"title":"Women''s Organizer","levels":["region","ward"]},
+  {"title":"Deputy Women''s Organizer","levels":["region"]},
+  {"title":"Youth Organizer","levels":["region","ward"]},
+  {"title":"Deputy Youth Organizer","levels":["region"]},
+  {"title":"Communications Officer","levels":["region","ward"]},
+  {"title":"Nasara Coordinator","levels":["region","ward"]},
+  {"title":"Zonal Coordinator","levels":["ward"]},
+  {"title":"Chairman","levels":["branch"]},
+  {"title":"Secretary","levels":["branch"]},
+  {"title":"Organizer","levels":["branch"]},
+  {"title":"Youth Organizer","levels":["branch"]},
+  {"title":"Women''s Organizer","levels":["branch"]},
+  {"title":"Communications Officer","levels":["branch"]},
+  {"title":"Treasurer","levels":["branch"]},
+  {"title":"Executive Member 1","levels":["branch"]},
+  {"title":"Executive Member 2","levels":["branch"]}
+]'::jsonb
+where key = 'positions';
 
 notify pgrst, 'reload schema';
