@@ -501,7 +501,9 @@ async function prefixForExec(rec){
 // distinct format (REG-####) from executive registration numbers, so the
 // two cannot be confused when verifying nominations.
 async function nextBranchRegistryNo(branchId){
-  return await nextRegNo('MEMBER-'+branchId);
+  // Use a short prefix: 'BR-' plus the first 6 chars of the branch ID.
+  // Gives compact registry numbers like BR-mqfy0r-0001.
+  return await nextRegNo('BR-'+branchId.slice(0,6));
 }
 // No migration needed — Supabase is the single source of truth from first use.
 async function migrateToNational(){ /* no-op: Supabase schema handles structure */ }
