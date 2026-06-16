@@ -564,6 +564,7 @@ function isBranchSecretaryFor(branchId){
 // a Branch Secretary can only for their own designated branch.
 function canManageRegister(branchId){
   if(isNational() || (State.session && State.session.role==='constituency_admin')) return true;
+  if(State.session && State.session.role==='branch_admin') return true;
   return isBranchSecretaryFor(branchId);
 }
 
