@@ -220,6 +220,11 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
   #zonalPrintAlbum .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
   #zonalPrintAlbum .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important}
   #zonalListView,#zonalAlbumView{display:none !important}
+  #conRegPrintAlbum.reg-print-active{display:block !important}
+  #conRegPrintTable.reg-print-hide{display:none !important}
+  #conRegPrintAlbum .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
+  #conRegPrintAlbum .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important}
+  #conRegListView,#conRegAlbumView{display:none !important}
 }
 
 @media print{
@@ -697,7 +702,10 @@ async function _render(){
     if(route==='dashboard'){ c.innerHTML = await viewDashboard(); }
     else if(route==='constituencies'){ c.innerHTML = await viewConstituencies(); }
     else if(route==='region'){ c.innerHTML = await viewRegionDetail(parts[1]); }
-    else if(route==='constituency'){ c.innerHTML = await viewConstituencyDetail(parts[1]); }
+    else if(route==='constituency'){
+      if(parts[2]==='register'){ c.innerHTML = await viewConstituencyRegister(parts[1]); wireConstituencyRegister(parts[1]); }
+      else { c.innerHTML = await viewConstituencyDetail(parts[1]); }
+    }
     else if(route==='regional'){ c.innerHTML = await viewRegional(parts[1]); }
     else if(route==='wards'){ location.hash = isNational()?'#/constituencies':('#/constituency/'+(userConId()||'')); return; }
     else if(route==='ward'){
@@ -1140,7 +1148,9 @@ async function viewConstituencyDetail(id){
 
   return `
   ${crumb}
-  <div class="section-head"><h2>${esc(con.name)}</h2><span class="badge">${esc(con.code)}</span><span class="badge k">Constituency</span>${isNational()?`<span class="badge y">${esc(region?region.name:con.regionId)}</span>`:''}</div>
+  <div class="section-head"><h2>${esc(con.name)}</h2><span class="badge">${esc(con.code)}</span><span class="badge k">Constituency</span>${isNational()?`<span class="badge y">${esc(region?region.name:con.regionId)}</span>`:''}<span class="spacer"></span>
+    ${canViewRegister(id)?`<button class="btn sm" data-link="#/constituency/${id}/register">📋 Constituency Register</button>`:''}
+  </div>
 
   <div class="card pad" style="margin-top:14px">
     <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Zonal/Electoral Areas</h3><span class="badge k">${wards.length}</span><span class="spacer"></span>
@@ -1683,6 +1693,274 @@ async function buildZonalAlbum(){
   });
   grid.innerHTML = cards.length ? cards.join('') : `<p class="muted small" style="padding:12px">No members match the current filter.</p>`;
   grid.querySelectorAll('[data-link]').forEach(el=>{ el.style.cursor='pointer'; el.onclick=()=>{ location.hash=el.dataset.link; render(); }; });
+}
+
+/* ============================================================
+   CONSTITUENCY REGISTER & ALBUM
+   Aggregates all branch registers across every ward and branch
+   in the constituency. Available to Constituency Admin and
+   National Admin.
+   ============================================================ */
+async function viewConstituencyRegister(conId){
+  const con = await Data.get('con:'+conId);
+  if(!con) return emptyState('🚫','Not found','This constituency does not exist.');
+  if(!inScope(conId)) return denyView();
+  if(!canViewRegister(conId)) return denyView();
+
+  const g = await loadGraph();
+  const wards = g.wards.filter(w=>w.constituencyId===conId).sort((a,b)=>a.name.localeCompare(b.name));
+  // All branches across all wards
+  const branches = g.branches.filter(b=> wards.some(w=>w.id===b.wardId)).sort((a,b)=>a.name.localeCompare(b.name));
+  // Load all members in parallel
+  const allMembersNested = await Promise.all(branches.map(b=>Data.branchRegister(b.id)));
+  // Attach branch + ward info for grouping
+  const allMembers = allMembersNested.flatMap((ms, i)=> ms.map(m=>({
+    ...m,
+    _branchId: branches[i].id,
+    _branchName: branches[i].name,
+    _wardId: branches[i].wardId,
+    _wardName: (g.wMap[branches[i].wardId]||{}).name||'—',
+  })));
+
+  const male = allMembers.filter(m=>m.gender==='male').length;
+  const female = allMembers.filter(m=>m.gender==='female').length;
+
+  // Group members by ward then branch for the register list
+  const branchesByWard = {};
+  wards.forEach(w=>{ branchesByWard[w.id] = branches.filter(b=>b.wardId===w.id); });
+
+  return `
+  <div class="crumb"><a href="#/constituency/${conId}">‹ ${esc(con.name)}</a></div>
+  <div class="section-head reg-screen-only"><h2>Constituency Register</h2><span class="sub">${esc(con.name)}</span></div>
+
+  <div class="grid-stat reg-screen-only" style="margin-bottom:14px">
+    <div class="stat g"><div class="n">${allMembers.length}</div><div class="l">Total members</div></div>
+    <div class="stat k"><div class="n">${male}</div><div class="l">Male</div></div>
+    <div class="stat y"><div class="n">${female}</div><div class="l">Female</div></div>
+    <div class="stat r"><div class="n">${branches.length}</div><div class="l">Branches</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs no-print" id="conRegTabs" style="margin-bottom:0">
+    <button class="tab active" data-tab="list">📋 Register list</button>
+    <button class="tab" data-tab="album">📸 Photo album</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters no-print" id="conRegFilters">
+    <input id="conRegSearch" placeholder="Search name or registry number…" style="flex:1;min-width:160px">
+    <select id="conRegWard"><option value="">All zonal areas</option>${wards.map(w=>`<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('')}</select>
+    <select id="conRegBranch"><option value="">All branches</option>${branches.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select>
+    <select id="conRegGender"><option value="">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
+    <select id="conRegSort"><option value="reg">Sort: Registry No.</option><option value="name">Sort: Name</option></select>
+    <button class="btn sm" id="conRegPrintBtn">🖨️ Print register</button>
+  </div>
+
+  <!-- List view grouped by ward → branch -->
+  <div id="conRegListView">
+    ${wards.length ? wards.map(w=>{
+      const wBranches = branchesByWard[w.id]||[];
+      const wardIdx = branches.map(b=>b.id);
+      return `<div class="album-ward-head con-reg-ward-head" data-ward="${esc(w.id)}">${esc(w.name)} <span class="ct">${wBranches.reduce((s,b)=>{const i=branches.findIndex(x=>x.id===b.id);return s+(i>=0?allMembersNested[i].length:0);},0)}</span></div>
+      ${wBranches.map(b=>{
+        const bi = branches.findIndex(x=>x.id===b.id);
+        const ms = bi>=0 ? allMembersNested[bi] : [];
+        return `<div class="small muted con-reg-branch-label" data-ward="${esc(w.id)}" data-branch="${esc(b.id)}" style="padding:4px 0 4px 8px;font-weight:700">${esc(b.name)} <span style="font-weight:400">(${ms.length})</span></div>
+        <div class="list con-reg-branch-group" data-ward="${esc(w.id)}" data-branch="${esc(b.id)}">${ms.length ? ms.map(m=>`
+          <div class="item con-reg-item"
+               data-name="${esc(m.fullName.toLowerCase())}" data-reg="${esc(m.registryNo.toLowerCase())}"
+               data-gender="${esc(m.gender||'')}" data-ward="${esc(w.id)}" data-branch="${esc(b.id)}">
+            <div class="av">${m.photo?`<img src="${m.photo}" alt="">`:initials(m.fullName)}</div>
+            <div class="body">
+              <div class="nm">${esc(m.fullName)} <span class="reg">${esc(m.registryNo)}</span></div>
+              <div class="mt">${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))} • ${esc(m.phone||'—')}${m.dob?' • '+fmtDate(m.dob):''}</div>
+            </div>
+          </div>`).join('')
+          : `<p class="muted small" style="padding:6px 0 6px 8px">No members registered for this branch yet.</p>`}
+        </div>`;
+      }).join('')}`;
+    }).join('') : `<p class="muted small">No branches in this constituency yet.</p>`}
+  </div>
+
+  <!-- Album view -->
+  <div id="conRegAlbumView" style="display:none">
+    <div class="album-grid" id="conRegAlbumGrid"></div>
+  </div>
+
+  <!-- Print-only register table (grouped by ward → branch) -->
+  <div class="print-only" id="conRegPrintTable">
+    <div class="album-print-head">
+      <img src="${LOGO_FULL}" alt="NDC">
+      <div class="pt">${esc(con.name)} — Constituency Member Register</div>
+      <div class="ps">${allMembers.length} registered member(s) across ${branches.length} branch(es) in ${wards.length} zonal area(s) • Printed ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div class="pm">${esc(PARTY_MOTTO)}</div>
+    </div>
+    ${wards.map(w=>{
+      const wBranches = branchesByWard[w.id]||[];
+      return `<div style="margin-top:14px"><div style="font-size:14px;font-weight:800;color:var(--green-dark);border-bottom:2px solid var(--green-soft);padding-bottom:4px;margin-bottom:8px">${esc(w.name)}</div>
+      ${wBranches.map(b=>{
+        const bi = branches.findIndex(x=>x.id===b.id);
+        const ms = bi>=0 ? allMembersNested[bi] : [];
+        return `<div style="margin-bottom:10px"><b style="font-size:12px">${esc(b.name)}</b>
+        <table class="reg-print-table">
+          <thead><tr><th>#</th><th>Registry No.</th><th>Full Name</th><th>NDC ID</th><th>Gender</th><th>Date of Birth</th><th>Phone</th></tr></thead>
+          <tbody>${ms.map((m,j)=>`<tr><td>${j+1}</td><td><b>${esc(m.registryNo)}</b></td><td>${esc(m.fullName)}</td><td>${esc(m.memberId||'—')}</td><td>${esc((m.gender||'—').replace(/^./,c=>c.toUpperCase()))}</td><td>${esc(m.dob?fmtDate(m.dob):'—')}</td><td>${esc(m.phone||'—')}</td></tr>`).join('')}
+          </tbody>
+        </table></div>`;
+      }).join('')}</div>`;
+    }).join('')}
+    <div class="album-print-foot">${esc(PARTY_SLOGAN)}</div>
+  </div>
+
+  <!-- Print-only album -->
+  <div class="print-only" id="conRegPrintAlbum">
+    <div class="album-print-head">
+      <img src="${LOGO_FULL}" alt="NDC">
+      <div class="pt">${esc(con.name)} — Constituency Member Photo Album</div>
+      <div class="ps">${allMembers.length} registered member(s) • Printed ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div class="pm">${esc(PARTY_MOTTO)}</div>
+    </div>
+    <div class="album-grid" id="conRegPrintAlbumGrid">
+      ${allMembers.map(m=>`
+        <div class="album-card">
+          <div class="album-photo">${m.photo?`<img src="${m.photo}" alt="${esc(m.fullName)}">`:`<span class="ph-init">${initials(m.fullName)}</span>`}</div>
+          <div class="album-meta">
+            <div class="reg">${esc(m.registryNo)}</div>
+            <div class="nm">${esc(m.fullName)}</div>
+            <div class="pos">${esc(m._branchName)}</div>
+            <div class="loc">${esc(m._wardName)} • ${esc((m.gender||'').replace(/^./,c=>c.toUpperCase()))}${m.dob?' • '+fmtDate(m.dob):''}</div>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="album-print-foot">${esc(PARTY_SLOGAN)}</div>
+  </div>`;
+}
+
+function wireConstituencyRegister(conId){
+  let activeTab = 'list';
+
+  // Tab switching
+  document.querySelectorAll('#conRegTabs .tab').forEach(tab=>{
+    tab.onclick=()=>{
+      document.querySelectorAll('#conRegTabs .tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      activeTab = tab.dataset.tab;
+      $('#conRegListView').style.display = activeTab==='list' ? '' : 'none';
+      $('#conRegAlbumView').style.display = activeTab==='album' ? '' : 'none';
+      const pb=$('#conRegPrintBtn');
+      if(pb) pb.textContent = activeTab==='album' ? '🖨️ Print album' : '🖨️ Print register';
+      if(activeTab==='album') buildConRegAlbum();
+      filterConRegList();
+    };
+  });
+
+  // Print button
+  const pb=$('#conRegPrintBtn');
+  if(pb) pb.onclick=(e)=>{
+    e.stopPropagation();
+    if(activeTab==='album'){
+      const sg=$('#conRegAlbumGrid'), pg=$('#conRegPrintAlbumGrid');
+      if(sg&&pg) pg.innerHTML = sg.innerHTML;
+      $('#conRegPrintAlbum').classList.add('reg-print-active');
+      $('#conRegPrintTable').classList.add('reg-print-hide');
+      window.print();
+      setTimeout(()=>{ $('#conRegPrintAlbum').classList.remove('reg-print-active'); $('#conRegPrintTable').classList.remove('reg-print-hide'); },500);
+    } else {
+      window.print();
+    }
+  };
+
+  // Filters — ward filter also cascades to branch filter
+  const search=$('#conRegSearch'), wardSel=$('#conRegWard'), branchSel=$('#conRegBranch');
+  const gender=$('#conRegGender'), sort=$('#conRegSort');
+  if(search) search.oninput = filterConRegList;
+  if(gender) gender.onchange = filterConRegList;
+  if(sort) sort.onchange = ()=>{ filterConRegList(); if(activeTab==='album') buildConRegAlbum(); };
+  if(wardSel) wardSel.onchange = ()=>{
+    // Filter branch dropdown to selected ward
+    if(branchSel){
+      [...branchSel.options].forEach(o=>{ if(!o.value) return; const el=document.querySelector(`.con-reg-branch-group[data-branch="${o.value}"]`); o.style.display=(!wardSel.value||el&&el.dataset.ward===wardSel.value)?'':'none'; });
+      if(branchSel.value){ const opt=branchSel.querySelector(`option[value="${branchSel.value}"]`); if(opt&&opt.style.display==='none') branchSel.value=''; }
+    }
+    filterConRegList();
+  };
+  if(branchSel) branchSel.onchange = filterConRegList;
+}
+
+function filterConRegList(){
+  const q=($('#conRegSearch')||{}).value||'';
+  const wFilter=($('#conRegWard')||{}).value||'';
+  const bFilter=($('#conRegBranch')||{}).value||'';
+  const gFilter=($('#conRegGender')||{}).value||'';
+
+  document.querySelectorAll('.con-reg-item').forEach(el=>{
+    const nameMatch = !q || el.dataset.name.includes(q.toLowerCase()) || el.dataset.reg.includes(q.toLowerCase());
+    const wardMatch = !wFilter || el.dataset.ward===wFilter;
+    const branchMatch = !bFilter || el.dataset.branch===bFilter;
+    const genderMatch = !gFilter || el.dataset.gender===gFilter;
+    el.style.display = (nameMatch&&wardMatch&&branchMatch&&genderMatch) ? '' : 'none';
+  });
+
+  // Show/hide branch group labels and groups
+  document.querySelectorAll('.con-reg-branch-group').forEach(grp=>{
+    const hasVisible = [...grp.querySelectorAll('.con-reg-item')].some(el=>el.style.display!=='none');
+    const wardMatch = !wFilter || grp.dataset.ward===wFilter;
+    const branchMatch = !bFilter || grp.dataset.branch===bFilter;
+    const show = hasVisible && wardMatch && branchMatch;
+    grp.style.display = show ? '' : 'none';
+    const lbl = grp.previousElementSibling;
+    if(lbl&&lbl.classList.contains('con-reg-branch-label')) lbl.style.display = show ? '' : 'none';
+  });
+
+  // Show/hide ward headers
+  document.querySelectorAll('.con-reg-ward-head').forEach(head=>{
+    const wardId = head.dataset.ward;
+    const wardMatch = !wFilter || wardId===wFilter;
+    const anyVisible = wardMatch && [...document.querySelectorAll(`.con-reg-branch-group[data-ward="${wardId}"]`)].some(g=>g.style.display!=='none');
+    head.style.display = anyVisible ? '' : 'none';
+  });
+}
+
+async function buildConRegAlbum(){
+  const grid=$('#conRegAlbumGrid'); if(!grid) return;
+  const q=($('#conRegSearch')||{}).value||'';
+  const wFilter=($('#conRegWard')||{}).value||'';
+  const bFilter=($('#conRegBranch')||{}).value||'';
+  const gFilter=($('#conRegGender')||{}).value||'';
+  const s=($('#conRegSort')||{}).value||'reg';
+
+  // Gather from visible list items
+  const items=[...document.querySelectorAll('.con-reg-item')].filter(el=>{
+    const nameMatch = !q || el.dataset.name.includes(q.toLowerCase()) || el.dataset.reg.includes(q.toLowerCase());
+    const wardMatch = !wFilter || el.dataset.ward===wFilter;
+    const branchMatch = !bFilter || el.dataset.branch===bFilter;
+    const genderMatch = !gFilter || el.dataset.gender===gFilter;
+    return nameMatch&&wardMatch&&branchMatch&&genderMatch;
+  });
+
+  const cards = items.map(el=>{
+    const nm=el.querySelector('.nm'); const mt=el.querySelector('.mt');
+    const av=el.querySelector('.av'); const img=av?av.querySelector('img'):null;
+    const regEl=el.querySelector('.reg');
+    const name=nm?nm.childNodes[0].textContent.trim():'';
+    const reg=regEl?regEl.textContent.trim():'';
+    const photo=img?img.src:'';
+    const sub=mt?mt.textContent:'';
+    return {name,reg,photo,sub,el};
+  });
+
+  if(s==='name') cards.sort((a,b)=>a.name.localeCompare(b.name));
+  else cards.sort((a,b)=>a.reg.localeCompare(b.reg));
+
+  grid.innerHTML = cards.length ? cards.map(({name,reg,photo,sub})=>`
+    <div class="album-card">
+      <div class="album-photo">${photo?`<img src="${photo}" alt="${esc(name)}">`:`<span class="ph-init">${initials(name)}</span>`}</div>
+      <div class="album-meta">
+        <div class="reg">${esc(reg)}</div>
+        <div class="nm">${esc(name)}</div>
+        <div class="loc">${esc(sub)}</div>
+      </div>
+    </div>`).join('') : `<p class="muted small" style="padding:12px">No members match the current filter.</p>`;
 }
 
 /* ============================================================
