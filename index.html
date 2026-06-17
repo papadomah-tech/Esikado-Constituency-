@@ -212,15 +212,18 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 /* When printing album, show the album block and hide the table */
 @media print{
   #regPrintAlbum.reg-print-active{display:block !important}
+  #regPrintAlbum.reg-print-hide{display:none !important}
   #regPrintTable.reg-print-hide{display:none !important}
   #regPrintAlbum .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
   #regPrintAlbum .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important}
   #zonalPrintAlbum.reg-print-active{display:block !important}
+  #zonalPrintAlbum.reg-print-hide{display:none !important}
   #zonalPrintTable.reg-print-hide{display:none !important}
   #zonalPrintAlbum .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
   #zonalPrintAlbum .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important}
   #zonalListView,#zonalAlbumView{display:none !important}
   #conRegPrintAlbum.reg-print-active{display:block !important}
+  #conRegPrintAlbum.reg-print-hide{display:none !important}
   #conRegPrintTable.reg-print-hide{display:none !important}
   #conRegPrintAlbum .album-grid{grid-template-columns:repeat(3,1fr) !important;gap:9px !important}
   #conRegPrintAlbum .album-card{break-inside:avoid;page-break-inside:avoid;box-shadow:none !important;border:1px solid #bbb !important}
@@ -1427,9 +1430,9 @@ function wireBranchRegister(branchId){
       // Restore after print
       setTimeout(()=>{ $('#regPrintAlbum').classList.remove('reg-print-active'); $('#regPrintTable').classList.remove('reg-print-hide'); },500);
     } else {
-      $('#regPrintAlbum').style.display='none';
-      $('#regPrintTable').style.display='';
+      $('#regPrintAlbum').classList.add('reg-print-hide');
       window.print();
+      setTimeout(()=>{ $('#regPrintAlbum').classList.remove('reg-print-hide'); },500);
     }
   };
 
@@ -1628,7 +1631,9 @@ function wireZonalRegister(wardId){
       window.print();
       setTimeout(()=>{ $('#zonalPrintAlbum').classList.remove('reg-print-active'); $('#zonalPrintTable').classList.remove('reg-print-hide'); },500);
     } else {
+      $('#zonalPrintAlbum').classList.add('reg-print-hide');
       window.print();
+      setTimeout(()=>{ $('#zonalPrintAlbum').classList.remove('reg-print-hide'); },500);
     }
   };
 
@@ -1866,7 +1871,10 @@ function wireConstituencyRegister(conId){
       window.print();
       setTimeout(()=>{ $('#conRegPrintAlbum').classList.remove('reg-print-active'); $('#conRegPrintTable').classList.remove('reg-print-hide'); },500);
     } else {
+      // Printing the register table — hide the album section
+      $('#conRegPrintAlbum').classList.add('reg-print-hide');
       window.print();
+      setTimeout(()=>{ $('#conRegPrintAlbum').classList.remove('reg-print-hide'); },500);
     }
   };
 
