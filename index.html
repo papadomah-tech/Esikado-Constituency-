@@ -2376,13 +2376,17 @@ async function viewAlbum(q){
     const cid=g.conOf(e); const con=cid?g.cMap[cid]:null;
     const rid=g.regionOf(e); const reg=rid?g.rMap[rid]:null;
     let groupKey, groupName, loc='';
-    if(e.level==='region'){ groupKey='reg:'+rid; groupName=(reg?reg.name:rid)+' (Region)'; loc=(reg?reg.name:'')+' (Region)'; }
-    else if(e.level==='constituency'){ groupKey='con:'+cid; groupName=con?con.name+' ('+(reg?reg.code:con.regionId)+')':'—'; loc=(con?con.name:'')+' (Constituency)'; }
-    else {
-      groupKey='con:'+cid; groupName=con?con.name+' ('+(reg?reg.code:con.regionId)+')':'Unassigned';
-      if(e.level==='ward'){ const w=g.wMap[e.wardId]; loc=(w?w.name:'')+' (Zonal/Electoral Area)'; }
-      else if(e.level==='branch'){ const b=g.bMap[e.branchId]; loc=(b?b.name:'—')+' (Branch)'; }
-      else { const u=g.uMap[e.unitId]; const b=u?g.bMap[u.branchId]:null; loc=(u?u.name:'—')+(b?' • '+b.name:'')+' (Unit)'; }
+    if(scoped){
+      // Scoped view: group by Zonal/Electoral Area name
+      if(e.level==='ward'){ const w=g.wMap[e.wardId]; groupKey='ward:'+(e.wardId); groupName=w?w.name:'Unassigned'; loc=(w?w.name:'')+' (Zonal/Electoral Area)'; }
+      else if(e.level==='branch'){ const b=g.bMap[e.branchId]; const w=b?g.wMap[b.wardId]:null; groupKey='ward:'+(w?w.id:'?'); groupName=w?w.name:'Unassigned'; loc=(b?b.name:'—')+' (Branch)'; }
+      else { groupKey='region:'+rid; groupName=(reg?reg.name:rid)+' (Region)'; loc=(reg?reg.name:'')+' (Region)'; }
+    } else {
+      // National view: group by constituency
+      if(e.level==='region'){ groupKey='reg:'+rid; groupName=(reg?reg.name:rid)+' (Region)'; loc=(reg?reg.name:'')+' (Region)'; }
+      else if(e.level==='ward'){ const w=g.wMap[e.wardId]; groupKey='con:'+cid; groupName=con?con.name+' ('+(reg?reg.code:con.regionId)+')':'Unassigned'; loc=(w?w.name:'')+' (Zonal/Electoral Area)'; }
+      else if(e.level==='branch'){ const b=g.bMap[e.branchId]; groupKey='con:'+cid; groupName=con?con.name+' ('+(reg?reg.code:con.regionId)+')':'Unassigned'; loc=(b?b.name:'—')+' (Branch)'; }
+      else { groupKey='con:'+cid; groupName=con?con.name+' ('+(reg?reg.code:con.regionId)+')':'Unassigned'; loc='(Unassigned)'; }
     }
     return Object.assign({}, e, {_conId:cid, _con:con?con.name:'', _regionId:rid, _groupKey:groupKey, _groupName:groupName, _loc:loc});
   });
@@ -2450,7 +2454,7 @@ function albumRenderBody(){
   }
 
   const body = $('#albumBody'); if(!body) return;
-  if(!list.length){ body.innerHTML = `<div class="empty"><div class="e-ico">📸</div><h3>No photos to show</h3><p>No executives match these filters yet.</p></div>`; return; }
+  if(!list.length){ body.innerHTML = `<div class="empty"><div class="e-ico">📸</div><h3>No photos to show</h3><p>${State._album&&State._album.execs.length===0?'No executives have been registered yet. Add executives at the Zonal/Electoral Area level via Registry → [Zonal Area] → + Add.':'No executives match the current filters.'}</p></div>`; return; }
 
   const card = (e)=>`
     <div class="album-card" data-link="#/exec/${e.id}">
