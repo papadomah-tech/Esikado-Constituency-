@@ -38,6 +38,9 @@ h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.01em}
 .brand-txt .t1{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.78;font-weight:700}
 .brand-txt .t2{font-size:15.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.nav-arrows{display:flex;align-items:center;gap:2px;margin-left:8px}
+.nav-arrows .iconbtn{font-size:20px;font-weight:700;padding:4px 10px;opacity:.85;line-height:1}
+.nav-arrows .iconbtn:disabled{opacity:.3;cursor:default}
 .sync-dot{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;background:rgba(255,255,255,.16);padding:5px 9px;border-radius:999px}
 .sync-dot i{width:7px;height:7px;border-radius:50%;background:var(--gold);display:inline-block}
 .sync-dot.online i{background:#7BE29B}
@@ -795,6 +798,10 @@ function shell(active){
           <div class="t2">Executive Registry</div>
         </div>
       </div>
+      <div class="nav-arrows">
+        <button class="iconbtn" id="navBack" title="Go back" onclick="history.back()">‹</button>
+        <button class="iconbtn" id="navFwd" title="Go forward" onclick="history.forward()">›</button>
+      </div>
       <div class="right">
         <span class="sync-dot" id="syncDot"><i></i><span id="syncTxt">Local</span></span>
         <button class="iconbtn" data-act="account" title="My account">👤</button>
@@ -1030,7 +1037,12 @@ async function viewDashboard(){
     <div class="legend"><span><i class="dot" style="background:var(--green)"></i>Male <b>${gd.male||0}</b></span><span><i class="dot" style="background:var(--gold)"></i>Female <b>${gd.female||0}</b></span></div>`;
 
   const heading = scoped ? ((g.cMap[scoped]||{}).name||'Constituency') : NATION_NAME;
-  const fab = `<a class="fab" href="${isNational()?'#/constituencies':('#/constituency/'+(scoped||''))}" title="Open registry">＋ Register</a>`;
+  const isBranchAdm = State.session && State.session.role==='branch_admin';
+  const fabHref = isNational() ? '#/constituencies'
+    : isBranchAdm && State.session.scopeBranchId ? '#/branch/'+State.session.scopeBranchId
+    : isBranchAdm ? '#/constituencies'
+    : '#/constituency/'+(scoped||'');
+  const fab = `<a class="fab" href="${fabHref}" title="Open registry">＋ Register</a>`;
 
   // National roll-up: per-region executive counts
   let regionalBlock='';
@@ -1050,8 +1062,21 @@ async function viewDashboard(){
     </div>`;
   }
 
+  // Quick-links for scoped users
+  const quickLinks = [];
+  if(isBranchAdm && State.session.scopeBranchId){
+    quickLinks.push(`<a class="btn sm" href="#/branch/${State.session.scopeBranchId}">📂 My branch</a>`);
+    quickLinks.push(`<a class="btn sm primary" href="#/register/${State.session.scopeBranchId}">📋 Branch Register</a>`);
+  } else if(scoped){
+    quickLinks.push(`<a class="btn sm" href="#/constituency/${scoped}">📂 Registry</a>`);
+    if(isWardAdmin()) quickLinks.push(`<a class="btn sm primary" href="#/ward/${State.session.scopeWardId||''}">📋 Zonal Register</a>`);
+    else quickLinks.push(`<a class="btn sm primary" href="#/constituency/${scoped}/register">📋 Constituency Register</a>`);
+  }
+
   return `
   <div class="section-head"><h2>${esc(heading)}</h2><span class="spacer"></span><span class="badge k">${esc(State.session.fullName||State.session.username)}</span></div>
+
+  ${quickLinks.length?`<div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap">${quickLinks.join('')}</div>`:''}
   <div class="grid-stat">
     <div class="stat g"><div class="n">${execs.length}</div><div class="l">Executives</div></div>
     <div class="stat k"><div class="n">${scoped?wards.length:g.regions.length}</div><div class="l">${scoped?'Zonal Areas':'Regions'}</div></div>
@@ -2423,8 +2448,10 @@ async function viewExecForm(execId, q){
     parentField = selectField('unitId','Unit / Polling station',units.map(u=>({v:u.id,t:u.name})),parentId,true);
   }
 
+  const backLink = e ? ('#/exec/'+e.id) : (level==='region'?'#/regional/'+parentId : level==='ward'?'#/ward/'+parentId : level==='branch'?'#/branch/'+parentId : '#/constituency/'+parentId);
+  const backLabel = e ? esc(e.fullName) : (level==='region'||level==='ward'||level==='branch'?'‹ Back':'‹ Back');
   return `
-  <div class="crumb"><a href="javascript:history.back()">‹ Back</a></div>
+  <div class="crumb"><a href="${backLink}">‹ Back</a></div>
   <div class="section-head"><h2>${e?'Edit':'Register'} ${LVS[level]} executive</h2></div>
   <form id="execForm" class="card pad" data-level="${level}" data-id="${execId||''}">
     <div class="field"><label>Registration number</label>
@@ -2540,7 +2567,7 @@ async function viewExecProfile(id){
   const a=age(e.dob);
   const lvlBadge = e.level==='region'?'y':e.level==='constituency'?'':e.level==='ward'?'k':e.level==='branch'?'y':'r';
   return `
-  <div class="crumb"><a href="javascript:history.back()">‹ Back</a></div>
+  <div class="crumb"><a href="${parentLink}">‹ ${esc(parentName)}</a></div>
   <div class="card pad">
     <div class="profile-top">
       ${e.photo?`<img class="profile-photo" src="${e.photo}" alt="${esc(e.fullName)}">`:`<div class="profile-photo" style="display:grid;place-items:center;color:var(--green);font-size:34px;font-weight:800">${initials(e.fullName)}</div>`}
@@ -3463,6 +3490,11 @@ async function orgFormModal(type, existing, parentId){
 function wireGlobal(){
   document.querySelectorAll('[data-link]').forEach(el=>{ el.style.cursor='pointer'; el.onclick=(e)=>{ if(e.target.closest('[data-act]'))return; location.hash=el.dataset.link; render(); }; });
   document.querySelectorAll('[data-act]').forEach(el=> el.addEventListener('click', onAction));
+  // Update back/forward button states
+  const navBack=$('#navBack'), navFwd=$('#navFwd');
+  if(navBack) navBack.disabled = (history.length<=1);
+  // Forward button can't be reliably detected in all browsers — always enabled but gracefully does nothing if no forward state
+  if(navFwd) navFwd.disabled = false;
   const nomToggle=$('#nomToggle');
   if(nomToggle) nomToggle.addEventListener('change', async()=>{
     const branchId=nomToggle.dataset.branch, open=nomToggle.checked;
@@ -3484,8 +3516,8 @@ async function onAction(e){
   if(act==='newWardIn') return orgFormModal('ward',null,el.dataset.con);
   if(act==='newChild') return orgFormModal(el.dataset.level,null,el.dataset.parent);
   if(act==='editOrg'){ const n=await Data.get(el.dataset.level+':'+el.dataset.id); return orgFormModal(el.dataset.level,n,null); }
-  if(act==='delOrg'){ const go=await confirmModal('Delete '+LVS[el.dataset.level]+'?','This also deletes everything beneath it (branches and their executives).'); if(go){ await cascadeDelete(el.dataset.level,el.dataset.id); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
-  if(act==='delExec'){ const go=await confirmModal('Delete executive?','This permanently removes '+el.dataset.name+'.'); if(go){ await SB.delete('ndc_executives','id=eq.'+el.dataset.id); await audit('DELETE','executive',el.dataset.id,'Deleted '+el.dataset.name); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
+  if(act==='delOrg'){ const go=await confirmModal('Delete '+LVS[el.dataset.level]+'?','This also deletes everything beneath it (branches and their executives).'); if(go){ await cascadeDelete(el.dataset.level,el.dataset.id); toast('Deleted'); const crumb=document.querySelector('.crumb a'); if(crumb&&crumb.href&&!crumb.href.includes('javascript:'))location.href=crumb.href; else history.back(); setTimeout(render,50);} return; }
+  if(act==='delExec'){ const go=await confirmModal('Delete executive?','This permanently removes '+el.dataset.name+'.'); if(go){ await SB.delete('ndc_executives','id=eq.'+el.dataset.id); await audit('DELETE','executive',el.dataset.id,'Deleted '+el.dataset.name); toast('Deleted'); const crumb=document.querySelector('.crumb a'); if(crumb&&crumb.href&&!crumb.href.includes('javascript:'))location.href=crumb.href; else history.back(); setTimeout(render,50);} return; }
   if(act==='exportReport') return exportExecsCSV();
   if(act==='saveEditUser') return doSaveEditUser();
   if(act==='editToggleSuspend') return doEditToggleSuspend();
@@ -3494,7 +3526,7 @@ async function onAction(e){
   if(act==='saveExec') return saveExec();
   if(act==='saveRegMember') return saveRegMember();
   if(act==='delRegMember') return delRegMember();
-  if(act==='cancel') return history.back();
+  if(act==='cancel'){ const crumb=document.querySelector('.crumb a'); if(crumb&&crumb.href&&!crumb.href.includes('javascript:'))location.href=crumb.href; else history.back(); return; }
   if(act==='takePhoto'){ const c=$('#camIn'); if(c) c.click(); return; }
   if(act==='pickPhoto'){ const g=$('#galIn'); if(g) g.click(); return; }
   if(act==='printReport') return window.print();
