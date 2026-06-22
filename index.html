@@ -718,7 +718,12 @@ async function _render(){
       else { c.innerHTML = await viewConstituencyDetail(parts[1]); }
     }
     else if(route==='regional'){ c.innerHTML = await viewRegional(parts[1]); }
-    else if(route==='wards'){ location.hash = isNational()?'#/constituencies':('#/constituency/'+(userConId()||'')); return; }
+    else if(route==='wards'){
+      if(State.session && State.session.role==='branch_admin' && State.session.scopeBranchId){
+        location.hash = '#/branch/'+State.session.scopeBranchId; return;
+      }
+      location.hash = isNational()?'#/constituencies':('#/constituency/'+(userConId()||'')); return;
+    }
     else if(route==='ward'){
       if(parts[2]==='register'){ c.innerHTML = await viewZonalRegister(parts[1]); wireZonalRegister(parts[1]); }
       else { c.innerHTML = await viewOrgDetail('ward', parts[1]); }
@@ -767,12 +772,19 @@ function shell(active){
   let ctx = esc(NATION_NAME);
   if(scopedCon){ ctx = esc(State.session.scopeConstituencyName || scopedCon); }
   if(State.session && State.session.role==='branch_admin' && State.session.scopeBranchName){ ctx = esc(State.session.scopeBranchName); }
-  // registry tab target — branch_admin goes directly to their branch
-  const branchAdminBranch = State.session && State.session.role==='branch_admin' && State.session.scopeBranchId;
-  const regHref = isNational()? '#/constituencies'
-    : branchAdminBranch ? '#/branch/'+State.session.scopeBranchId
-    : State.session && State.session.role==='branch_admin' ? '#/constituencies'  // fallback: will show assignment warning
-    : ('#/constituency/'+ (scopedCon||''));
+  // Registry tab target — route each role to their appropriate landing page
+  function registryHref(){
+    const r = State.session && State.session.role;
+    if(r === 'national_admin') return '#/constituencies';
+    if(r === 'branch_admin'){
+      return State.session.scopeBranchId
+        ? '#/branch/' + State.session.scopeBranchId
+        : '#/constituencies'; // shows "no branch assigned" warning
+    }
+    // ward_admin, constituency_admin, viewer — land on their constituency page
+    return '#/constituency/' + (scopedCon||'');
+  }
+  const regHref = registryHref();
   const regActive = ['constituencies','region','constituency','regional','ward','branch','unit'].includes(active)?'constituencies':active;
   return `
   <div class="topbar">
@@ -1162,6 +1174,12 @@ async function viewConstituencyDetail(id){
   const con = await Data.get('con:'+id);
   if(!con) return emptyState('🚫','Not found','That constituency does not exist.');
   if(!inScope(id)) return denyView();
+  // Branch admins should never see the constituency page — send them to their branch
+  if(State.session && State.session.role==='branch_admin'){
+    const bid = State.session.scopeBranchId;
+    if(bid){ location.hash='#/branch/'+bid; return viewOrgDetail('branch', bid); }
+    return emptyState('🚫','No branch assigned','Your account has not been assigned to a specific branch yet. Ask your Constituency Administrator to edit your account in Admin → Users & roles and select your branch.');
+  }
   const g = await loadGraph();
   const region = g.rMap[con.regionId];
   const wards = g.wards.filter(w=>w.constituencyId===id).sort((a,b)=>a.name.localeCompare(b.name));
