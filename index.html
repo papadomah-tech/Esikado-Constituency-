@@ -769,7 +769,10 @@ function shell(active){
   if(State.session && State.session.role==='branch_admin' && State.session.scopeBranchName){ ctx = esc(State.session.scopeBranchName); }
   // registry tab target — branch_admin goes directly to their branch
   const branchAdminBranch = State.session && State.session.role==='branch_admin' && State.session.scopeBranchId;
-  const regHref = isNational()? '#/constituencies' : branchAdminBranch ? '#/branch/'+State.session.scopeBranchId : ('#/constituency/'+ (scopedCon||''));
+  const regHref = isNational()? '#/constituencies'
+    : branchAdminBranch ? '#/branch/'+State.session.scopeBranchId
+    : State.session && State.session.role==='branch_admin' ? '#/constituencies'  // fallback: will show assignment warning
+    : ('#/constituency/'+ (scopedCon||''));
   const regActive = ['constituencies','region','constituency','regional','ward','branch','unit'].includes(active)?'constituencies':active;
   return `
   <div class="topbar">
@@ -1106,7 +1109,8 @@ async function viewConstituencies(){
   if(State.session && State.session.role==='branch_admin'){
     const bid = State.session.scopeBranchId;
     if(bid){ location.hash='#/branch/'+bid; return viewOrgDetail('branch', bid); }
-    return emptyState('🚫','No branch assigned','Ask a constituency administrator to assign your account to a branch.');
+    // No branch assigned — show a helpful message with the admin's contact info
+    return emptyState('🚫','No branch assigned','Your account has not been assigned to a specific branch yet. Ask your Constituency Administrator to edit your account in Admin → Users & roles and select your branch.');
   }
   if(!isNational()){ const cid=userConId(); return cid? await viewConstituencyDetail(cid) : emptyState('🚫','No constituency assigned','Ask a national administrator to assign your account to a constituency.'); }
   return viewRegions();
