@@ -1102,10 +1102,10 @@ async function loadGraph(){
 function denyView(){ return emptyState('🔒','Outside your access','This record belongs to a different constituency than the one your account manages.'); }
 
 async function viewConstituencies(){
-  // Branch admin goes straight to their own branch page
+  // Branch admin goes straight to their own branch page — return the view directly
   if(State.session && State.session.role==='branch_admin'){
     const bid = State.session.scopeBranchId;
-    if(bid){ location.hash='#/branch/'+bid; return render(); }
+    if(bid){ location.hash='#/branch/'+bid; return viewOrgDetail('branch', bid); }
     return emptyState('🚫','No branch assigned','Ask a constituency administrator to assign your account to a branch.');
   }
   if(!isNational()){ const cid=userConId(); return cid? await viewConstituencyDetail(cid) : emptyState('🚫','No constituency assigned','Ask a national administrator to assign your account to a constituency.'); }
@@ -1315,12 +1315,20 @@ async function branchNominationsCard(branch){
   </div>`;
 }
 async function buildCrumb(level,node){
-  const rootHref = isNational()?'#/constituencies':('#/constituency/'+(userConId()||''));
+  const isBranchAdm = State.session && State.session.role==='branch_admin';
+  const rootHref = isNational()?'#/constituencies':isBranchAdm&&State.session.scopeBranchId?'#/branch/'+State.session.scopeBranchId:('#/constituency/'+(userConId()||''));
   const parts=[`<a href="${rootHref}">Registry</a>`];
   const conId = await constituencyIdOf(node);
-  if(conId){ const c=await Data.get('con:'+conId); parts.push(`<span class="sep">›</span><a href="#/constituency/${conId}">${esc(c?c.name:conId)}</a>`); }
+  // Branch admins can't navigate to constituency or ward pages — show text only
+  if(conId && !isBranchAdm){ const c=await Data.get('con:'+conId); parts.push(`<span class="sep">›</span><a href="#/constituency/${conId}">${esc(c?c.name:conId)}</a>`); }
+  else if(conId && isBranchAdm){ const c=await Data.get('con:'+conId); parts.push(`<span class="sep">›</span><span>${esc(c?c.name:conId)}</span>`); }
   if(level==='ward'){ parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
-  else if(level==='branch'){ const w=await Data.get('ward:'+node.wardId); parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Zonal/Electoral Area')}</a>`,`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
+  else if(level==='branch'){
+    const w=await Data.get('ward:'+node.wardId);
+    if(!isBranchAdm){ parts.push(`<span class="sep">›</span><a href="#/ward/${node.wardId}">${esc(w?w.name:'Zonal/Electoral Area')}</a>`); }
+    else { parts.push(`<span class="sep">›</span><span>${esc(w?w.name:'Zonal/Electoral Area')}</span>`); }
+    parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`);
+  }
   else if(level==='unit'){ const b=await Data.get('branch:'+node.branchId); const w=b?await Data.get('ward:'+b.wardId):null; if(w)parts.push(`<span class="sep">›</span><a href="#/ward/${w.id}">${esc(w.name)}</a>`); if(b)parts.push(`<span class="sep">›</span><a href="#/branch/${b.id}">${esc(b.name)}</a>`); parts.push(`<span class="sep">›</span><span>${esc(node.name)}</span>`); }
   return `<div class="crumb">${parts.join('')}</div>`;
 }
