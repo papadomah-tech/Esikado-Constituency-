@@ -3187,18 +3187,45 @@ function wireEditUser(username){
   };
 }
 async function viewAccount(){
-  const u = State.session;
-  const userRoleLabel = roleLabel(u.role);
-  const scopeLine = u.scopeConstituencyId ? `<p class="muted small" style="margin:4px 0 0">Constituency: ${esc(u.scopeConstituencyName||u.scopeConstituencyId)}</p>` : '';
+  // Re-fetch from DB to get the most current data (e.g. after an admin edits this account)
+  const rows = await SB.select('ndc_users','username=eq.'+encodeURIComponent(State.session.username)+'&limit=1');
+  const u = rows&&rows[0] ? rowToUser(rows[0]) : State.session;
+  const g = await loadGraph();
+
+  const detailRow = (label, value)=> value
+    ? `<div class="row small" style="padding:7px 0;border-bottom:1px solid var(--line)">
+        <span class="muted" style="flex:0 0 140px;font-size:12.5px">${label}</span>
+        <span style="font-size:14px">${value}</span>
+       </div>` : '';
+
+  const regionName = u.scopeConstituencyId ? (()=>{ const con=g.cMap[u.scopeConstituencyId]; const reg=con?g.rMap[con.regionId]:null; return reg?reg.name:''; })() : '';
+
   return `
   <div class="section-head"><h2>My account</h2></div>
 
+  <!-- Profile card -->
   <div class="card pad">
-    <h3 style="font-size:15px;margin-bottom:4px">${esc(u.fullName||u.username)}</h3>
-    <p class="muted small" style="margin:0">@${esc(u.username)} • ${esc(userRoleLabel)}</p>
-    ${scopeLine}
+    <div class="row" style="gap:16px;align-items:flex-start;margin-bottom:14px">
+      <div class="av" style="width:56px;height:56px;font-size:20px;flex:0 0 auto">${initials(u.fullName||u.username)}</div>
+      <div>
+        <h3 style="font-size:18px;margin:0 0 2px">${esc(u.fullName||u.username)}</h3>
+        <p class="muted small" style="margin:0">@${esc(u.username)}</p>
+      </div>
+    </div>
+
+    ${detailRow('Role', roleLabel(u.role)+(u.isBranchSecretary?' &nbsp;<span class="badge y">Branch Secretary</span>':''))}
+    ${detailRow('Constituency', u.scopeConstituencyId ? esc(u.scopeConstituencyName||u.scopeConstituencyId) : '')}
+    ${detailRow('Region', regionName ? esc(regionName) : '')}
+    ${detailRow('Branch', u.scopeBranchName ? esc(u.scopeBranchName) : '')}
+    ${detailRow('Account status', u.suspended
+      ? '<span class="badge r">Suspended</span>'
+      : u.mustChangePassword
+        ? '<span class="badge y">Password change required</span>'
+        : '<span class="badge">Active</span>')}
+    ${detailRow('Username', esc(u.username))}
   </div>
 
+  <!-- Change password -->
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:6px">Change password</h3>
     <p class="muted small" style="margin:0 0 10px">Choose a password only you know. You will need your current password to set a new one.</p>
