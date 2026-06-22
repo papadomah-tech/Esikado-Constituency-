@@ -565,12 +565,15 @@ function can(action){
   const r = State.session && State.session.role;
   if(r==='national_admin' || r==='constituency_admin') return true;
   if(r==='viewer') return action==='view'||action==='export';
-  // ward_admin / branch_admin
-  return ['view','create','edit','delete','export','import'].includes(action);
+  if(r==='branch_admin') return action==='view'||action==='export'; // register only; no org structure changes
+  // ward_admin — can view, create, edit, delete, export but not import
+  return ['view','create','edit','delete','export'].includes(action);
 }
 function isNational(){ return State.session && State.session.role==='national_admin'; }
 // The constituency a non-national user is locked to (null for national admins).
 function userConId(){ return isNational()? null : (State.session && State.session.scopeConstituencyId) || null; }
+// The branch a branch_admin is scoped to (null for all other roles).
+function userBranchId(){ return (State.session && State.session.role==='branch_admin') ? (State.session.scopeBranchId||null) : null; }
 // Whether the current user may access a given constituency id.
 function inScope(conId){ const s=userConId(); return s===null ? true : conId===s; }
 // The constituency context currently in view (national admins can switch; others are fixed).
@@ -589,13 +592,18 @@ function isBranchSecretaryFor(branchId){
 // a Branch Secretary can only for their own designated branch.
 function canManageRegister(branchId){
   if(isNational() || (State.session && State.session.role==='constituency_admin')) return true;
-  if(State.session && State.session.role==='branch_admin') return true;
+  // Branch admin can only manage their own branch's register
+  if(State.session && State.session.role==='branch_admin'){
+    return !State.session.scopeBranchId || State.session.scopeBranchId===branchId;
+  }
   return isBranchSecretaryFor(branchId);
 }
 // Read-only access to the branch register (view, search, print — no add/edit/delete).
 function canViewRegister(branchId){
   if(canManageRegister(branchId)) return true;
-  return !!(State.session && State.session.role==='ward_admin');
+  if(State.session && State.session.role==='ward_admin') return true;
+  // Branch admin can view their own branch's register read-only if no scope set
+  return false;
 }
 function isWardAdmin(){ return !!(State.session && State.session.role==='ward_admin'); }
 
@@ -755,8 +763,10 @@ function shell(active){
   // brand context line
   let ctx = esc(NATION_NAME);
   if(scopedCon){ ctx = esc(State.session.scopeConstituencyName || scopedCon); }
-  // registry tab target
-  const regHref = isNational()? '#/constituencies' : ('#/constituency/'+ (scopedCon||''));
+  if(State.session && State.session.role==='branch_admin' && State.session.scopeBranchName){ ctx = esc(State.session.scopeBranchName); }
+  // registry tab target — branch_admin goes directly to their branch
+  const branchAdminBranch = State.session && State.session.role==='branch_admin' && State.session.scopeBranchId;
+  const regHref = isNational()? '#/constituencies' : branchAdminBranch ? '#/branch/'+State.session.scopeBranchId : ('#/constituency/'+ (scopedCon||''));
   const regActive = ['constituencies','region','constituency','regional','ward','branch','unit'].includes(active)?'constituencies':active;
   return `
   <div class="topbar">
@@ -1089,6 +1099,12 @@ async function loadGraph(){
 function denyView(){ return emptyState('🔒','Outside your access','This record belongs to a different constituency than the one your account manages.'); }
 
 async function viewConstituencies(){
+  // Branch admin goes straight to their own branch page
+  if(State.session && State.session.role==='branch_admin'){
+    const bid = State.session.scopeBranchId;
+    if(bid){ location.hash='#/branch/'+bid; return render(); }
+    return emptyState('🚫','No branch assigned','Ask a constituency administrator to assign your account to a branch.');
+  }
   if(!isNational()){ const cid=userConId(); return cid? await viewConstituencyDetail(cid) : emptyState('🚫','No constituency assigned','Ask a national administrator to assign your account to a constituency.'); }
   return viewRegions();
 }
@@ -1196,6 +1212,11 @@ async function viewOrgDetail(level, id){
   if(!node) return emptyState('🚫','Not found','This record may have been deleted.');
   const conId = await constituencyIdOf(node);
   if(!inScope(conId)) return denyView();
+  // Branch admins can only view their own specific branch — not ward pages or other branches
+  if(State.session && State.session.role==='branch_admin'){
+    if(level==='ward') return denyView();
+    if(level==='branch' && State.session.scopeBranchId && State.session.scopeBranchId!==id) return denyView();
+  }
   const positions = await Data.positions();
   const execs = await Data.execs();
   const ownExecs = execs.filter(e=> e.level===level && e[level+'Id']===id );
@@ -2981,7 +3002,7 @@ async function viewAdmin(){
     <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span><button class="btn sm primary" data-act="newUser">＋ User</button></div>
     ${users.length? `<div class="list">`+users.map(u=>`
       <div class="item"><div class="av">${initials(u.fullName||u.username)}</div>
-        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${roleBadge(u.role)}">${esc(roleLabel(u.role))}</span>${u.isBranchSecretary?' <span class="badge y">Branch Secretary</span>':''}${u.suspended?' <span class="badge r">suspended</span>':''}</div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}${u.isBranchSecretary&&u.scopeBranchName?' • '+esc(u.scopeBranchName):''}</div></div>
+        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${roleBadge(u.role)}">${esc(roleLabel(u.role))}</span>${u.isBranchSecretary?' <span class="badge y">Branch Secretary</span>':''}${u.suspended?' <span class="badge r">suspended</span>':''}</div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}${u.scopeBranchName?' • '+esc(u.scopeBranchName):''}</div></div>
         ${canManage(u)?`
         <div class="row" style="gap:6px;flex:0 0 auto">
           <button class="btn sm" data-act="toggleSuspend" data-id="${esc(u.username)}" data-suspended="${u.suspended?'1':'0'}" title="${u.suspended?'Unsuspend':'Suspend'}">${u.suspended?'▶':'⏸'}</button>
@@ -3156,6 +3177,7 @@ async function newUserFlow(){
   if(role==='branch_admin'){
     branchId = $('#nuBranch') ? $('#nuBranch').value : '';
     isSecretary = $('#nuSecretary') ? $('#nuSecretary').checked : false;
+    if(role==='branch_admin' && !branchId){ toast('Select a branch for this Branch Admin',true); return; }
     if(isSecretary && !branchId){ toast('Select a branch to assign as Branch Secretary',true); return; }
   }
   r.el.remove();
@@ -3163,7 +3185,8 @@ async function newUserFlow(){
   const branch = branchId? await Data.get('branch:'+branchId) : null;
   const rec={id:username,username,password:pw,fullName:name||username,role,mustChangePassword:true,createdBy:State.session.username};
   if(role!=='national_admin'){ rec.scopeConstituencyId=conId; rec.scopeConstituencyName=con?con.name:conId; }
-  if(role==='branch_admin' && isSecretary && branch){ rec.scopeBranchId=branch.id; rec.scopeBranchName=branch.name; rec.isBranchSecretary=true; }
+  if(role==='branch_admin' && branch){ rec.scopeBranchId=branch.id; rec.scopeBranchName=branch.name; }
+  if(role==='branch_admin' && isSecretary && branch){ rec.isBranchSecretary=true; }
   await SB.upsert('ndc_users', userToRow(rec));
   await audit('CREATE','user',username,'Added user @'+username+' ('+role+(con?', '+con.name:'')+(rec.isBranchSecretary?', Branch Secretary for '+branch.name:'')+')');
   toast('User added'); render();
