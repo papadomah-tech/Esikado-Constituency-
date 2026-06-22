@@ -8,7 +8,7 @@
      cached responses (including error responses) must never be replayed.
    Bump CACHE on every release so old shells, and any previously cached
    Supabase responses, are discarded. */
-const CACHE = 'ndc-gh-v36';
+const CACHE = 'ndc-gh-v37';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {

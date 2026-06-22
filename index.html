@@ -741,7 +741,10 @@ async function _render(){
     else if(route==='reports'){ c.innerHTML = await viewReports(); }
     else if(route==='album'){ c.innerHTML = await viewAlbum(q); wireAlbum(); }
     else if(route==='data'){ c.innerHTML = await viewData(); wireData(); }
-    else if(route==='admin'){ c.innerHTML = await viewAdmin(); wireAdmin(); }
+    else if(route==='admin'){
+      if(parts[1]==='user' && parts[3]==='edit'){ c.innerHTML = await viewEditUser(parts[2]); wireEditUser(parts[2]); }
+      else { c.innerHTML = await viewAdmin(); wireAdmin(); }
+    }
     else if(route==='account'){ c.innerHTML = await viewAccount(); wireAccount(); }
     else if(route==='audit'){ c.innerHTML = await viewAudit(); }
     else { c.innerHTML = await viewDashboard(); }
@@ -3001,15 +3004,13 @@ async function viewAdmin(){
   <div class="card pad" style="margin-top:14px">
     <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Users & roles</h3><span class="spacer"></span><button class="btn sm primary" data-act="newUser">＋ User</button></div>
     ${users.length? `<div class="list">`+users.map(u=>`
-      <div class="item"><div class="av">${initials(u.fullName||u.username)}</div>
-        <div class="body"><div class="nm">${esc(u.fullName||u.username)} <span class="badge ${roleBadge(u.role)}">${esc(roleLabel(u.role))}</span>${u.isBranchSecretary?' <span class="badge y">Branch Secretary</span>':''}${u.suspended?' <span class="badge r">suspended</span>':''}</div><div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}${u.scopeBranchName?' • '+esc(u.scopeBranchName):''}</div></div>
-        ${canManage(u)?`
-        <div class="row" style="gap:6px;flex:0 0 auto">
-          <button class="btn sm" data-act="toggleSuspend" data-id="${esc(u.username)}" data-suspended="${u.suspended?'1':'0'}" title="${u.suspended?'Unsuspend':'Suspend'}">${u.suspended?'▶':'⏸'}</button>
-          <button class="btn sm" data-act="resetUser" data-id="${esc(u.username)}" title="Reset password">⟲</button>
-          <button class="btn sm danger" data-act="delUser" data-id="${esc(u.username)}" title="Delete">✕</button>
+      <div class="item ${canManage(u)?'user-row':''}" ${canManage(u)?`data-link="#/admin/user/${esc(u.username)}/edit"`:''}>
+        <div class="av" style="${u.suspended?'opacity:.45':''}">${initials(u.fullName||u.username)}</div>
+        <div class="body">
+          <div class="nm">${esc(u.fullName||u.username)} <span class="badge ${roleBadge(u.role)}">${esc(roleLabel(u.role))}</span>${u.isBranchSecretary?' <span class="badge y">Branch Secretary</span>':''}${u.suspended?' <span class="badge r">suspended</span>':''}</div>
+          <div class="mt">@${esc(u.username)}${u.scopeConstituencyId?' • '+esc(conName(u.scopeConstituencyId)):''}${u.scopeBranchName?' • '+esc(u.scopeBranchName):''}</div>
         </div>
-        `:(u.username==='admin'?'<span class="tiny muted">primary</span>':'<span class="tiny muted">you</span>')}
+        ${canManage(u)?'<div class="chev">›</div>':(u.username==='admin'?'<span class="tiny muted">primary</span>':'<span class="tiny muted">you</span>')}
       </div>`).join('')+`</div>` : `<p class="muted small">No accounts yet for this constituency. Use ＋ User to add one.</p>`}
   </div>
 
@@ -3020,42 +3021,171 @@ async function viewAdmin(){
 }
 function wireAdmin(){
   const nu=$('[data-act=newUser]'); if(nu) nu.onclick=newUserFlow;
-
-  document.querySelectorAll('[data-act=delUser]').forEach(b=>b.onclick=async()=>{
-    const go=await confirmModal('Remove user?','This permanently removes login access for @'+b.dataset.id+'. This cannot be undone.');
-    if(go){ await SB.delete('ndc_users','id=eq.'+encodeURIComponent(b.dataset.id)); await audit('DELETE','user',b.dataset.id,'Removed user'); toast('User removed'); render(); }
-  });
-
-  document.querySelectorAll('[data-act=toggleSuspend]').forEach(b=>b.onclick=async()=>{
-    const suspended = b.dataset.suspended==='1';
-    const action = suspended?'Unsuspend':'Suspend';
-    const go=await confirmModal(action+' user?', suspended
-      ? 'This restores login access for @'+b.dataset.id+'.'
-      : 'This immediately blocks @'+b.dataset.id+' from logging in. They will see a message that their account has been suspended.');
-    if(!go) return;
-    await SB.update('ndc_users','id=eq.'+encodeURIComponent(b.dataset.id),{suspended:!suspended,updated_at:nowISO()});
-    await audit('UPDATE','user',b.dataset.id,(suspended?'Unsuspended':'Suspended')+' user @'+b.dataset.id);
-    toast('User '+(suspended?'unsuspended':'suspended')); render();
-  });
-
-  document.querySelectorAll('[data-act=resetUser]').forEach(b=>b.onclick=async()=>{
-    const body=`
-      <p class="muted small" style="margin:0 0 10px">Set a new temporary password for @${esc(b.dataset.id)}. They will be required to choose their own password the next time they sign in.</p>
-      <div class="field"><label>Temporary password</label><input id="ruPw" type="password"></div>`;
-    const r=await modalForm('Reset password',body);
-    if(!r.ok) return;
-    const pw=$('#ruPw').value;
-    if(!pw||pw.length<4){ toast('Enter a temporary password of at least 4 characters',true); return; }
-    r.el.remove();
-    await SB.update('ndc_users','id=eq.'+encodeURIComponent(b.dataset.id),{password:pw,must_change_password:true,updated_at:nowISO()});
-    await audit('UPDATE','user',b.dataset.id,'Reset password for @'+b.dataset.id);
-    toast('Password reset — user must set a new password at next sign in');
-  });
 }
 
 /* ============================================================
-   ACCOUNT (every signed-in user: change own password)
+   EDIT USER
+   Full-page edit form for an existing user account.
    ============================================================ */
+async function viewEditUser(username){
+  const rows = await SB.select('ndc_users','username=eq.'+encodeURIComponent(username)+'&limit=1');
+  if(!rows||!rows[0]) return emptyState('🚫','Not found','This user account no longer exists.');
+  const u = rowToUser(rows[0]);
+  const g = await loadGraph();
+  const national = isNational();
+  const ownCon = userConId();
+
+  // Access check — same rules as canManage in viewAdmin
+  const canManage = national ? u.username!=='admin' : u.username!==State.session.username;
+  if(!canManage) return denyView();
+  if(!national && u.scopeConstituencyId!==ownCon) return denyView();
+
+  const conName = (cid)=> cid? ((g.cMap[cid]||{}).name||cid) : '—';
+
+  // Build constituency options for national admin
+  let conField='';
+  if(national){
+    const regions = g.regions.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    const conGroups = regions.map(r=>`<optgroup label="${esc(r.name)}">${g.cons.filter(c=>c.regionId===r.id).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${esc(c.id)}" ${u.scopeConstituencyId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</optgroup>`).join('');
+    conField = `<div class="field"><label>Constituency</label><select id="euCon"><option value="">— None (National) —</option>${conGroups}</select></div>`;
+  } else {
+    conField = `<p class="muted small" style="margin:0 0 8px">Constituency: <b>${esc(conName(u.scopeConstituencyId))}</b></p>`;
+  }
+
+  // Build branch picker (grouped by ward) — relevant for branch_admin
+  const branches = g.branches.filter(b=> national || (g.wMap[b.wardId]||{}).constituencyId===ownCon).sort((a,b)=>a.name.localeCompare(b.name));
+  const wardMap = {};
+  branches.forEach(b=>{ const w=g.wMap[b.wardId]; if(w){ if(!wardMap[w.id])wardMap[w.id]=w; } });
+  const branchOpts = Object.values(wardMap).sort((a,b)=>a.name.localeCompare(b.name)).map(w=>`<optgroup label="${esc(w.name)}">${branches.filter(b=>b.wardId===w.id).map(b=>`<option value="${esc(b.id)}" ${u.scopeBranchId===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</optgroup>`).join('');
+
+  const roleOptions = national ? `
+    <option value="national_admin" ${u.role==='national_admin'?'selected':''}>National Admin</option>
+    <option value="constituency_admin" ${u.role==='constituency_admin'?'selected':''}>Constituency Admin</option>
+    <option value="ward_admin" ${u.role==='ward_admin'?'selected':''}>Zonal/Electoral Area Admin</option>
+    <option value="branch_admin" ${u.role==='branch_admin'?'selected':''}>Branch Admin</option>
+    <option value="viewer" ${u.role==='viewer'?'selected':''}>Viewer</option>` : `
+    <option value="constituency_admin" ${u.role==='constituency_admin'?'selected':''}>Constituency Admin</option>
+    <option value="ward_admin" ${u.role==='ward_admin'?'selected':''}>Zonal/Electoral Area Admin</option>
+    <option value="branch_admin" ${u.role==='branch_admin'?'selected':''}>Branch Admin</option>
+    <option value="viewer" ${u.role==='viewer'?'selected':''}>Viewer</option>`;
+
+  return `
+  <div class="crumb"><a href="#/admin">‹ Users & roles</a></div>
+  <div class="section-head"><h2>Edit user</h2><span class="sub">@${esc(u.username)}</span></div>
+
+  <div class="card pad">
+    <h3 style="font-size:15px;margin-bottom:12px">Account details</h3>
+    <div class="field"><label>Full name</label><input id="euName" value="${esc(u.fullName||'')}"></div>
+    <div class="field"><label>Username</label><input value="${esc(u.username)}" readonly style="background:var(--green-soft);color:var(--green-dark);font-weight:700"></div>
+    <div class="field"><label>Role</label><select id="euRole">${roleOptions}</select></div>
+    ${conField}
+    <div class="field branch-edit-field" id="euBranchField" style="display:${u.role==='branch_admin'?'':'none'}">
+      <label>Branch</label>
+      <select id="euBranch"><option value="">— None —</option>${branchOpts}</select>
+    </div>
+    <div class="field branch-edit-field" id="euSecretaryField" style="display:${u.role==='branch_admin'?'':'none'}">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600">
+        <input type="checkbox" id="euSecretary" style="width:auto" ${u.isBranchSecretary?'checked':''}> Branch Secretary
+      </label>
+      <p class="muted small" style="margin:4px 0 0">Branch Secretary can compile the Branch Register for the selected branch.</p>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn primary" data-act="saveEditUser">Save changes</button>
+      <button class="btn ghost" data-act="cancel">Cancel</button>
+    </div>
+  </div>
+
+  <div class="card pad" style="margin-top:14px">
+    <h3 style="font-size:15px;margin-bottom:12px">Account status</h3>
+    <div class="row" style="flex-wrap:wrap;gap:10px">
+      <button class="btn sm" data-act="editToggleSuspend" data-id="${esc(u.username)}" data-suspended="${u.suspended?'1':'0'}">${u.suspended?'▶ Unsuspend account':'⏸ Suspend account'}</button>
+      <button class="btn sm" data-act="editResetPw" data-id="${esc(u.username)}">⟲ Reset password</button>
+      <button class="btn sm danger" data-act="editDelUser" data-id="${esc(u.username)}">✕ Remove account</button>
+    </div>
+    ${u.suspended?`<p class="muted small" style="margin:10px 0 0">This account is currently <b>suspended</b> — the user cannot sign in.</p>`:''}
+    ${u.mustChangePassword?`<p class="muted small" style="margin:6px 0 0">This user must set a new password at next sign in.</p>`:''}
+  </div>`;
+}
+
+function wireEditUser(username){
+  // Show/hide branch fields when role changes
+  const roleSel=$('#euRole');
+  const showBranch=()=>{
+    const isBranch=roleSel&&roleSel.value==='branch_admin';
+    document.querySelectorAll('.branch-edit-field').forEach(f=>f.style.display=isBranch?'':'none');
+  };
+  if(roleSel){ roleSel.addEventListener('change',showBranch); showBranch(); }
+
+  // Save changes
+  $('[data-act=saveEditUser]').onclick=async()=>{
+    const rows=await SB.select('ndc_users','username=eq.'+encodeURIComponent(username)+'&limit=1');
+    if(!rows||!rows[0]) return toast('User not found',true);
+    const u=rowToUser(rows[0]);
+    const g=await loadGraph();
+    const national=isNational();
+    const fullName=$('#euName').value.trim();
+    const role=$('#euRole').value;
+    const conId=national&&$('#euCon')?$('#euCon').value:u.scopeConstituencyId;
+    const branchId=$('#euBranch')?$('#euBranch').value:'';
+    const isSecretary=$('#euSecretary')?$('#euSecretary').checked:false;
+    if(!fullName){ toast('Full name is required',true); return; }
+    if(role!=='national_admin'&&!conId){ toast('Select a constituency for this user',true); return; }
+    if(role==='branch_admin'&&!branchId){ toast('Select a branch for this Branch Admin',true); return; }
+    const con=conId?await Data.get('con:'+conId):null;
+    const branch=branchId?await Data.get('branch:'+branchId):null;
+    const rec=Object.assign({},u,{
+      fullName, role,
+      scopeConstituencyId: role==='national_admin'?null:(conId||u.scopeConstituencyId),
+      scopeConstituencyName: role==='national_admin'?null:(con?con.name:(u.scopeConstituencyName||'')),
+      scopeBranchId: role==='branch_admin'&&branch?branch.id:null,
+      scopeBranchName: role==='branch_admin'&&branch?branch.name:null,
+      isBranchSecretary: role==='branch_admin'&&isSecretary,
+    });
+    await SB.upsert('ndc_users',userToRow(rec));
+    await audit('UPDATE','user',username,'Updated user @'+username+' — role:'+role+(con?' con:'+con.name:'')+(branch?' branch:'+branch.name:''));
+    toast('Changes saved');
+    location.hash='#/admin'; render();
+  };
+
+  // Suspend/unsuspend
+  $('[data-act=editToggleSuspend]').onclick=async()=>{
+    const b=$('[data-act=editToggleSuspend]');
+    const suspended=b.dataset.suspended==='1';
+    const go=await confirmModal((suspended?'Unsuspend':'Suspend')+' user?', suspended
+      ?'This restores login access for @'+username+'.'
+      :'This immediately blocks @'+username+' from logging in.');
+    if(!go) return;
+    await SB.update('ndc_users','id=eq.'+encodeURIComponent(username),{suspended:!suspended,updated_at:nowISO()});
+    await audit('UPDATE','user',username,(suspended?'Unsuspended':'Suspended')+' user @'+username);
+    toast('User '+(suspended?'unsuspended':'suspended'));
+    location.hash='#/admin/user/'+username+'/edit'; render();
+  };
+
+  // Reset password
+  $('[data-act=editResetPw]').onclick=async()=>{
+    const body=`
+      <p class="muted small" style="margin:0 0 10px">Set a new temporary password for @${esc(username)}. They will be required to choose their own password at next sign in.</p>
+      <div class="field"><label>Temporary password</label><input id="euPwNew" type="password"></div>`;
+    const r=await modalForm('Reset password',body);
+    if(!r.ok) return;
+    const pw=$('#euPwNew').value;
+    if(!pw||pw.length<4){ toast('Enter a password of at least 4 characters',true); return; }
+    r.el.remove();
+    await SB.update('ndc_users','id=eq.'+encodeURIComponent(username),{password:pw,must_change_password:true,updated_at:nowISO()});
+    await audit('UPDATE','user',username,'Reset password for @'+username);
+    toast('Password reset — user must set a new password at next sign in');
+  };
+
+  // Delete
+  $('[data-act=editDelUser]').onclick=async()=>{
+    const go=await confirmModal('Remove user?','This permanently removes login access for @'+username+'. This cannot be undone.');
+    if(!go) return;
+    await SB.delete('ndc_users','id=eq.'+encodeURIComponent(username));
+    await audit('DELETE','user',username,'Removed user @'+username);
+    toast('User removed');
+    location.hash='#/admin'; render();
+  };
+}
 async function viewAccount(){
   const u = State.session;
   const userRoleLabel = roleLabel(u.role);
@@ -3300,6 +3430,10 @@ async function onAction(e){
   if(act==='delOrg'){ const go=await confirmModal('Delete '+LVS[el.dataset.level]+'?','This also deletes everything beneath it (branches and their executives).'); if(go){ await cascadeDelete(el.dataset.level,el.dataset.id); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
   if(act==='delExec'){ const go=await confirmModal('Delete executive?','This permanently removes '+el.dataset.name+'.'); if(go){ await SB.delete('ndc_executives','id=eq.'+el.dataset.id); await audit('DELETE','executive',el.dataset.id,'Deleted '+el.dataset.name); toast('Deleted'); history.back(); setTimeout(render,50);} return; }
   if(act==='exportReport') return exportExecsCSV();
+  if(act==='saveEditUser') return doSaveEditUser();
+  if(act==='editToggleSuspend') return doEditToggleSuspend();
+  if(act==='editResetPw') return doEditResetPw();
+  if(act==='editDelUser') return doEditDelUser();
   if(act==='saveExec') return saveExec();
   if(act==='saveRegMember') return saveRegMember();
   if(act==='delRegMember') return delRegMember();
