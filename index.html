@@ -613,7 +613,14 @@ function isWardAdmin(){ return !!(State.session && State.session.role==='ward_ad
 /* ---------------- Data accessors (Supabase-backed) ---------------- */
 const Data = {
   regions: ()=> Promise.resolve(REGIONS.map(r=>({id:r.code, code:r.code, name:r.name, type:'region'}))),
-  constituencies: ()=> Promise.resolve(CONSTITUENCIES.map(c=>({id:c.code, code:c.code, name:c.name, regionId:c.regionId, type:'constituency'}))),
+  customConstituencies: async ()=>{ const r=await SB.select('ndc_settings','key=eq.custom_constituencies&limit=1'); return (r&&r[0]&&Array.isArray(r[0].value))?r[0].value:[]; },
+  constituencies: async ()=>{
+    const custom = await Data.customConstituencies();
+    const base = CONSTITUENCIES.map(c=>({id:c.code, code:c.code, name:c.name, regionId:c.regionId, type:'constituency', isBuiltIn:true}));
+    const codes = new Set(base.map(c=>c.code));
+    const extras = custom.filter(c=>!codes.has(c.code)).map(c=>({id:c.code, code:c.code, name:c.name, regionId:c.regionId, type:'constituency', isCustom:true}));
+    return [...base, ...extras];
+  },
   wards: async ()=>{ const r=await SB.select('ndc_wards','order=name.asc'); return (r||[]).map(rowToWard); },
   branches: async ()=>{ const r=await SB.select('ndc_branches','order=name.asc'); return (r||[]).map(rowToBranch); },
   units: async ()=>{ const r=await SB.select('ndc_units','order=name.asc'); return (r||[]).map(rowToUnit); },
@@ -638,7 +645,7 @@ const Data = {
       if(k.startsWith('unit:')){   const id=k.slice(5); const r=await SB.select('ndc_units','id=eq.'+id+'&limit=1'); return r&&r[0]?rowToUnit(r[0]):null; }
       if(k.startsWith('user:')){   const u=k.slice(5); const r=await SB.select('ndc_users','username=eq.'+encodeURIComponent(u)+'&limit=1'); return r&&r[0]?rowToUser(r[0]):null; }
       if(k.startsWith('reg:')){    const id=k.slice(4); const reg=REGION_MAP[id]; return reg?{id:reg.code,code:reg.code,name:reg.name,type:'region'}:null; }
-      if(k.startsWith('con:')){    const id=k.slice(4); const con=CONSTITUENCY_MAP[id]; return con?{id:con.code,code:con.code,name:con.name,regionId:con.regionId,type:'constituency'}:null; }
+      if(k.startsWith('con:')){    const id=k.slice(4); const con=CONSTITUENCY_MAP[id]; if(con) return {id:con.code,code:con.code,name:con.name,regionId:con.regionId,type:'constituency'}; const custom=await Data.customConstituencies(); const cc=custom.find(c=>c.code===id); return cc?{id:cc.code,code:cc.code,name:cc.name,regionId:cc.regionId,type:'constituency',isCustom:true}:null; }
     }catch(e){ console.warn('Data.get error for',k,e.message); }
     return null;
   },
@@ -3038,7 +3045,8 @@ async function viewAdmin(){
   let users, coverageHtml;
   if(national){
     users = allUsers;
-    coverageHtml = `<p class="muted small" style="margin:0">${esc(NATION_NAME)} • ${g.regions.length} regions • ${g.cons.length} constituencies (fixed national structure)</p>`;
+    const customCons = await Data.customConstituencies();
+    coverageHtml = `<p class="muted small" style="margin:0">${esc(NATION_NAME)} • ${g.regions.length} regions • ${g.cons.length} constituencies${customCons.length?` (${customCons.length} custom)`:''}</p>`;
   } else {
     // Constituency admin: accounts scoped to this constituency, regardless of who created them
     users = allUsers.filter(u=>u.scopeConstituencyId===ownCon);
@@ -3071,6 +3079,29 @@ async function viewAdmin(){
       </div>`).join('')+`</div>` : `<p class="muted small">No accounts yet for this constituency. Use ＋ User to add one.</p>`}
   </div>
 
+  ${national ? await (async()=>{
+    const customCons = await Data.customConstituencies();
+    const regionGroups = REGIONS.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    const regOpts = regionGroups.map(r=>`<option value="${esc(r.code)}">${esc(r.name)}</option>`).join('');
+    const customList = customCons.length
+      ? customCons.map(c=>{
+          const reg = REGION_MAP[c.regionId];
+          return `<div class="item" style="padding:10px 12px">
+            <div class="body">
+              <div class="nm">${esc(c.name)} <span class="badge" style="font-size:11px">${esc(c.code)}</span></div>
+              <div class="mt">${reg?esc(reg.name):esc(c.regionId||'')}</div>
+            </div>
+            <button class="btn sm danger" data-act="delCustomCon" data-code="${esc(c.code)}" style="flex:0 0 auto">✕</button>
+          </div>`;
+        }).join('')
+      : '<p class="muted small" style="margin:8px 0 0">No custom constituencies added yet.</p>';
+    return `<div class="card pad" style="margin-top:14px">
+      <div class="row" style="margin-bottom:10px"><h3 style="font-size:15px">Custom constituencies</h3><span class="spacer"></span><button class="btn sm primary" data-act="addCustomCon">＋ Add constituency</button></div>
+      <p class="muted small" style="margin:0 0 10px">Ghana's 276 constituencies are built in. Add new ones here when Parliament creates additional constituencies.</p>
+      ${customCons.length?`<div class="list" style="margin-bottom:0">${customList}</div>`:customList}
+    </div>`;
+  })() : ''}
+
   <div class="card pad" style="margin-top:14px">
     <h3 style="font-size:15px;margin-bottom:6px">Security note</h3>
     <p class="muted small" style="margin:0">User accounts are shared across all devices via the central database. To change your own password, use the account icon (👤) in the top bar.</p>
@@ -3078,6 +3109,54 @@ async function viewAdmin(){
 }
 function wireAdmin(){
   const nu=$('[data-act=newUser]'); if(nu) nu.onclick=newUserFlow;
+
+  // Add custom constituency
+  const addBtn=$('[data-act=addCustomCon]');
+  if(addBtn) addBtn.onclick=async()=>{
+    const regionGroups = REGIONS.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    const regOpts = regionGroups.map(r=>`<option value="${esc(r.code)}">${esc(r.name)}</option>`).join('');
+    const body=`
+      <p class="muted small" style="margin:0 0 12px">Enter the details of the new constituency. The code must be unique (e.g. a short abbreviation).</p>
+      <div class="field"><label>Constituency name</label><input id="ccName" placeholder="e.g. New Juaben Central"></div>
+      <div class="field"><label>Code <span class="muted" style="font-weight:400">(unique short ID, uppercase)</span></label><input id="ccCode" placeholder="e.g. NJC" style="text-transform:uppercase"></div>
+      <div class="field"><label>Region</label><select id="ccRegion"><option value="">Select region…</option>${regOpts}</select></div>`;
+    const r=await modalForm('Add constituency',body);
+    if(!r.ok) return;
+    const name=$('#ccName').value.trim();
+    const code=$('#ccCode').value.trim().toUpperCase();
+    const regionId=$('#ccRegion').value;
+    if(!name){ toast('Constituency name is required',true); return; }
+    if(!code){ toast('Code is required',true); return; }
+    if(!regionId){ toast('Select a region',true); return; }
+    if(!/^[A-Z0-9_-]{1,10}$/.test(code)){ toast('Code must be 1–10 uppercase letters/digits',true); return; }
+    // Check uniqueness against built-in and existing custom
+    if(CONSTITUENCY_MAP[code]){ toast('That code already exists in the built-in list',true); return; }
+    const existing=await Data.customConstituencies();
+    if(existing.find(c=>c.code===code)){ toast('A custom constituency with that code already exists',true); return; }
+    r.el.remove();
+    const updated=[...existing,{code,name,regionId}];
+    await SB.upsert('ndc_settings',{key:'custom_constituencies',value:updated});
+    await audit('CREATE','constituency',code,'Added custom constituency: '+name+' ('+code+') in region '+regionId);
+    toast('Constituency added');
+    render();
+  };
+
+  // Delete custom constituency
+  document.querySelectorAll('[data-act=delCustomCon]').forEach(btn=>{
+    btn.onclick=async()=>{
+      const code=btn.dataset.code;
+      const existing=await Data.customConstituencies();
+      const con=existing.find(c=>c.code===code);
+      if(!con){ toast('Not found',true); return; }
+      const go=await confirmModal('Remove constituency?',`Remove "${con.name}" (${con.code})? This does not delete any wards, branches or members already linked to it.`);
+      if(!go) return;
+      const updated=existing.filter(c=>c.code!==code);
+      await SB.upsert('ndc_settings',{key:'custom_constituencies',value:updated});
+      await audit('DELETE','constituency',code,'Removed custom constituency: '+con.name+' ('+code+')');
+      toast('Constituency removed');
+      render();
+    };
+  });
 }
 
 /* ============================================================
