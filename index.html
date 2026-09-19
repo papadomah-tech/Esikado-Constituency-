@@ -613,7 +613,12 @@ function isWardAdmin(){ return !!(State.session && State.session.role==='ward_ad
 /* ---------------- Data accessors (Supabase-backed) ---------------- */
 const Data = {
   regions: ()=> Promise.resolve(REGIONS.map(r=>({id:r.code, code:r.code, name:r.name, type:'region'}))),
-  customConstituencies: async ()=>{ const r=await SB.select('ndc_settings','key=eq.custom_constituencies&limit=1'); return (r&&r[0]&&Array.isArray(r[0].value))?r[0].value:[]; },
+  customConstituencies: async ()=>{
+    if(_customConCache !== null) return _customConCache;
+    const r=await SB.select('ndc_settings','key=eq.custom_constituencies&limit=1');
+    _customConCache = (r&&r[0]&&Array.isArray(r[0].value))?r[0].value:[];
+    return _customConCache;
+  },
   constituencies: async ()=>{
     const custom = await Data.customConstituencies();
     const base = CONSTITUENCIES.map(c=>({id:c.code, code:c.code, name:c.name, regionId:c.regionId, type:'constituency', isBuiltIn:true}));
@@ -650,6 +655,7 @@ const Data = {
     return null;
   },
 };
+function _invalidateCustomConCache(){ _customConCache = null; }
 function posForLevel(positions, level){ return positions.filter(p=>p.levels.includes(level)).map(p=>p.title); }
 
 // Resolve the constituency id for any executive or org node (null for region-level).
@@ -701,6 +707,7 @@ function parseHash(){
   return {parts,q};
 }
 let _rendering=false, _pending=false;
+let _customConCache = null; // null = not yet fetched; [] = fetched and empty
 async function render(){
   if(_rendering){ _pending=true; return; }
   _rendering=true;
@@ -3136,6 +3143,7 @@ function wireAdmin(){
     r.el.remove();
     const updated=[...existing,{code,name,regionId}];
     await SB.upsert('ndc_settings',{key:'custom_constituencies',value:updated});
+    _invalidateCustomConCache();
     await audit('CREATE','constituency',code,'Added custom constituency: '+name+' ('+code+') in region '+regionId);
     toast('Constituency added');
     render();
@@ -3152,6 +3160,7 @@ function wireAdmin(){
       if(!go) return;
       const updated=existing.filter(c=>c.code!==code);
       await SB.upsert('ndc_settings',{key:'custom_constituencies',value:updated});
+      _invalidateCustomConCache();
       await audit('DELETE','constituency',code,'Removed custom constituency: '+con.name+' ('+code+')');
       toast('Constituency removed');
       render();
